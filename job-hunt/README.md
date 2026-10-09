@@ -3,7 +3,7 @@
 Every morning on your laptop, Claude:
 1. finds new Hyderabad roles at Senior Manager level or above, **GCCs first**;
 2. tailors your resume to each job description;
-3. applies in your Chrome: LinkedIn → Apply → company site → sign in or create the account → fill the form → upload → submit (up to 15 a day);
+3. applies in your Chrome: LinkedIn → Apply → company site → sign in or create the account → fill the form → upload → submit (up to 30 a day);
 4. checks Gmail for interviews and sends you a summary on your phone.
 
 Full instructions for the agent: [`AGENT_DAILY.md`](AGENT_DAILY.md).
@@ -35,7 +35,7 @@ This repo is **public**. Your resume, tracker and form answers live in `job-hunt
    Fill in the empty fields in `applicant-profile.yaml`: notice period, CTC, PIN code and so on. Claude can also give you the pre-filled copy it made.
 5. In the Claude desktop app, create a **Scheduled task** that runs daily at 09:00, with the repo folder as its working folder and this prompt:
    > Run the daily job-hunt agent: follow job-hunt/AGENT_DAILY.md exactly, using Claude in Chrome and the Gmail connector.
-6. **First run:** watch it once with `daily_apply_cap: 2` in `profile.yaml`. When it looks right, set the cap back to 15.
+6. **First run:** watch it once with `daily_apply_cap: 2` in `profile.yaml`. When it looks right, set the cap back to 30.
 
 ## Day to day
 - Keep the laptop on and awake around 09:00.

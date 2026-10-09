@@ -68,10 +68,10 @@ sources:   # searched in this order
   - Instahyre
   - Foundit
 
-scoring:          # 0-100; queue the best 15 per day
+scoring:          # 0-100; queue the best 30 per day
   gcc: 25
   healthcare_or_financial_domain: 15
   level_director_or_above: 10
   skill_overlap: 50     # share of JD must-haves matching her resume
 min_score: 55
-daily_apply_cap: 15
+daily_apply_cap: 30

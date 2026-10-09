@@ -20,7 +20,7 @@ Working folder: the local clone of this repo. All personal files live in `job-hu
    - When signing in, use Chrome's saved password autofill.
    - Never type, print, log or store a password anywhere else.
    - If no saved password exists for an existing account, mark the job `Skipped` ("needs login").
-5. **Daily cap:** stop when `python job-hunt/tracker.py today` reaches `daily_apply_cap` (15). Wait 1–3 minutes between applications.
+5. **Daily cap:** stop when `python job-hunt/tracker.py today` reaches `daily_apply_cap` (30). Wait 1–3 minutes between applications.
 6. **Salary:** if the form demands a number, use `expected_ctc_inr_lpa`. If a posting's stated maximum is below `min_acceptable_ctc_inr_lpa`, skip it.
 7. **Declarations:** accept standard privacy and data-processing consents. Decline marketing and talent-community opt-ins. Skip the job if it asks for anything unusual, such as a non-compete or a background-check fee.
 
