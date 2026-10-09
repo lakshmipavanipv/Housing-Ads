@@ -3,3 +3,6 @@ credentials/google_credentials.json
 __pycache__/
 .env
 .DS_Store
+
+# Job hunt: personal data never goes to this public repo
+job-hunt/private/

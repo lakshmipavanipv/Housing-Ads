@@ -1,0 +1,77 @@
+# What jobs to look for. Edit freely.
+
+location:
+  include: ["Hyderabad", "Hyderabad/Secunderabad", "India (Remote)", "Remote - India"]
+  # Hybrid roles in Hyderabad are fine. Skip roles based only in other cities.
+
+# Equal to or above Senior Manager
+levels_include:
+  - Senior Manager
+  - Sr. Manager
+  - Associate Director
+  - Director
+  - Senior Director
+  - Head of
+  - AVP
+  - Assistant Vice President
+  - Vice President
+  - VP
+  - Principal Architect      # only if the posting is director band / 15+ yrs
+  - Enterprise Architect     # same rule
+levels_exclude:
+  - "Manager"                # plain Manager, without Senior/Director in the title
+  - Lead
+  - Senior Engineer
+  - Senior Analyst
+  - Consultant
+  - Specialist
+  - Intern
+
+experience_years: [12, 22]
+
+domains:   # the title or JD must be about at least one of these
+  - Data & Analytics
+  - Business Intelligence
+  - BI
+  - Analytics COE
+  - Data Governance
+  - Data Quality
+  - Data Platform
+  - Data Strategy
+  - Enterprise Reporting
+  - Visualization
+  - AI / GenAI
+  - Commercial Analytics
+  - Power BI
+  - Microsoft Fabric
+  - Snowflake
+  - Databricks
+
+# Global Capability Centres in Hyderabad: searched FIRST, scored higher.
+# Seed list - the agent verifies each has a Hyderabad centre and adds new ones it finds.
+gcc_priority:
+  banking_financial:   [JPMorgan Chase, Wells Fargo, Goldman Sachs, Bank of America, State Street,
+                        Fidelity Investments, HSBC, Deutsche Bank, Synchrony, Invesco, S&P Global,
+                        Mastercard, Visa, London Stock Exchange Group]
+  healthcare_lifesci:  [Novartis, Sanofi, Eli Lilly, Amgen, Bristol Myers Squibb, Evernorth / Cigna,
+                        Providence, Optum, Pfizer, AstraZeneca, Takeda, GSK, Zoetis, Medtronic,
+                        3M / Solventum]
+  tech_product_other:  [Microsoft, Google, Amazon, Salesforce, Micron, McDonald's, Deloitte USI,
+                        Ernst & Young GDS, Carrier, Lowe's, Target, Walmart Global Tech,
+                        Nike, Warner Bros. Discovery, Thomson Reuters, ServiceNow, Workday]
+
+sources:   # searched in this order
+  - GCC career sites (Workday / Greenhouse / Lever / SuccessFactors / company pages)
+  - LinkedIn Jobs (logged-in Chrome, Hyderabad, past 24h-3 days)
+  - Naukri
+  - iimjobs
+  - Instahyre
+  - Foundit
+
+scoring:          # 0-100; queue the best 15 per day
+  gcc: 25
+  healthcare_or_financial_domain: 15
+  level_director_or_above: 10
+  skill_overlap: 50     # share of JD must-haves matching her resume
+min_score: 55
+daily_apply_cap: 15

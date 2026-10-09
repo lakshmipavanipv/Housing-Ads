@@ -1,0 +1,63 @@
+# Copy to job-hunt/private/applicant-profile.yaml and fill in.
+# The agent ONLY answers application questions from this file + the resume.
+# If a required question isn't covered here, it skips that job and tells you.
+# Never put passwords here - Chrome's password manager stores those.
+
+personal:
+  first_name: ""
+  last_name: ""
+  email: ""
+  phone: ""                 # +91 ...
+  city: Hyderabad
+  state: Telangana
+  country: India
+  pincode: ""
+  address_line: ""          # optional, some Workday forms require it
+  linkedin_url: ""
+  date_of_birth: ""         # only filled if a form makes it mandatory
+
+work:
+  current_employer: ""
+  current_title: ""
+  total_experience_years: 16
+  relevant_experience_years: 16
+  notice_period_days: ""    # e.g. 60
+  earliest_start_date: ""   # e.g. 2026-12-15
+  current_ctc: ""           # say how forms should get it, e.g. "CAD 150,000" or "INR equivalent 85 LPA"
+  expected_ctc_inr_lpa: ""  # e.g. 70-85
+  min_acceptable_ctc_inr_lpa: ""   # agent skips jobs whose posted max is below this
+  willing_to_relocate_to_hyderabad: true
+  work_mode_preference: "Hybrid / Onsite Hyderabad"
+
+eligibility:
+  indian_citizen: true
+  authorized_to_work_in_india: true
+  requires_sponsorship_india: false
+  ever_worked_for_this_company: {}   # e.g. {"Wells Fargo": "Yes, 2019-2022", "JPMorgan Chase": "Yes, 2014-2018", "IBM": "Yes, 2010-2014"}
+
+education:
+  highest_degree: "B.Tech"
+  institution: "Kakatiya University"
+  graduation_year: ""
+  honours: "Gold Medalist"
+
+diversity:                  # "Prefer not to say" is always acceptable
+  gender: ""
+  disability: "Prefer not to say"
+  veteran: "Not applicable"
+
+standard_answers:
+  why_this_company: >
+    (2-3 lines the agent adapts per company)
+  why_leaving_current: >
+    Relocating to Hyderabad and looking for a senior leadership role in a global capability centre.
+  strengths: >
+    Building analytics COEs, enterprise BI modernization, data governance, GenAI-enabled analytics,
+    leading 20+ member global teams.
+  cover_letter_template: >
+    (optional - agent tailors 120-180 words per job from the resume and JD)
+
+consents:
+  agree_to_privacy_policy: true        # standard data-processing consent on career sites
+  allow_talent_community_signup: false
+  marketing_emails: false
