@@ -50,6 +50,10 @@ domains:   # the title or JD must be about at least one of these
 # Global Capability Centres in Hyderabad: searched FIRST, scored higher.
 # Seed list - the agent verifies each has a Hyderabad centre and adds new ones it finds.
 gcc_priority:
+  # Newly opened Hyderabad GCCs: checked FIRST every run, because new centres hire senior leaders early.
+  new_gccs_first:      [Vanguard (vanguardjobs.com - India), Nationwide (nationwide.com careers - India),
+                        DoorDash (careersatdoordash.com / job-boards.greenhouse.io/doordashindia),
+                        "L'Oreal (beauty-tech GCC, opening Nov 2026)", Costco]
   banking_financial:   [JPMorgan Chase, Wells Fargo, Goldman Sachs, Bank of America, State Street,
                         Fidelity Investments, HSBC, Deutsche Bank, Synchrony, Invesco, S&P Global,
                         Mastercard, Visa, London Stock Exchange Group]

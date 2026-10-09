@@ -25,7 +25,7 @@ Working folder: the local clone of this repo. All personal files live in `job-hu
 7. **Declarations:** accept standard privacy and data-processing consents. Decline marketing and talent-community opt-ins. Skip the job if it asks for anything unusual, such as a non-compete or a background-check fee.
 
 ## Step 1: Find jobs (GCCs first)
-1. For each company in `gcc_priority`, open its careers site in Chrome. Search for Data / Analytics / BI / AI roles in Hyderabad and open postings from the last 7 days.
+1. For each company in `gcc_priority` (start with `new_gccs_first`), open its careers site in Chrome. Search for Data / Analytics / BI / AI roles in Hyderabad and open postings from the last 7 days.
 2. Search LinkedIn Jobs in Chrome with:
    - Location: Hyderabad
    - Date posted: past 24 hours (past week on Mondays)
