@@ -22,7 +22,7 @@ Guardrail: new text may reword and re-emphasise, but may not introduce a tool,
 platform, certification or number that is not already in the base resume.
 """
 
-import json, re, subprocess, sys
+import json, re, shutil, subprocess, sys
 from datetime import date
 from pathlib import Path
 
@@ -113,8 +113,19 @@ def all_text(doc):
     return "\n".join(_para_text(p) for p in doc.paragraphs)
 
 
+def _soffice():
+    # LibreOffice is not on PATH by default on macOS or Windows.
+    for c in [shutil.which("soffice"), shutil.which("libreoffice"),
+              "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+              r"C:\Program Files\LibreOffice\program\soffice.exe",
+              r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"]:
+        if c and Path(c).exists():
+            return c
+    sys.exit("LibreOffice not found: install it from libreoffice.org")
+
+
 def to_pdf(path):
-    subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir",
+    subprocess.run([_soffice(), "--headless", "--convert-to", "pdf", "--outdir",
                     str(path.parent), str(path)], check=True, capture_output=True)
     return path.with_suffix(".pdf")
 

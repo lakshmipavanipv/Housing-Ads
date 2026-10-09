@@ -4,6 +4,8 @@ This file is for Claude. It runs every day as a scheduled task in the Claude des
 
 Working folder: the local clone of this repo. All personal files live in `job-hunt/private/`, which is git-ignored. **Never commit or push anything from `private/`.** The repo is public.
 
+Python: the installer makes a virtualenv. Wherever this file says `python`, use `.venv/bin/python` (Windows: `.venv\Scripts\python`) when that exists.
+
 ## Inputs
 - `job-hunt/profile.yaml`: what to search for (levels, domains, GCC list, scoring, daily cap).
 - `job-hunt/private/applicant-profile.yaml`: her answers for application forms.

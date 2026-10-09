@@ -17,22 +17,17 @@ This repo is **public**. Your resume, tracker and form answers live in `job-hunt
    2. In that Chrome, log in to **LinkedIn** and **Gmail**.
    3. Turn on Chrome → Settings → Passwords → "Offer to save passwords".
 2. In claude.ai → Settings → **Connectors**, connect **Gmail**.
-3. Clone this repo and set it up:
-   ```
-   git clone https://github.com/lakshmipavanipv/Housing-Ads.git
-   cd Housing-Ads && git checkout ccr-2da7b747-rbef94
-   pip install python-docx openpyxl pyyaml
-   ```
-   You also need LibreOffice (free), which turns resumes into PDFs.
-4. Create your private files:
-   ```
-   mkdir -p job-hunt/private/resume
-   copy your original resume .docx to  job-hunt/private/resume/original.docx
-   copy job-hunt/applicant-profile.example.yaml  job-hunt/private/applicant-profile.yaml   (fill phone/city first)
-   python job-hunt/tailor_resume.py base       # makes the Hyderabad base resume
-   python job-hunt/tracker.py init
-   ```
-   Fill in the empty fields in `applicant-profile.yaml`: notice period, CTC, PIN code and so on. Claude can also give you the pre-filled copy it made.
+3. Run the installer on the laptop. It downloads the code to `~/Housing-Ads`, installs Python packages and LibreOffice, and creates the private folders and tracker:
+   - **Mac:** open Terminal and paste
+     ```
+     curl -fsSL https://raw.githubusercontent.com/lakshmipavanipv/Housing-Ads/claude/awesome-cannon-7zgrea/job-hunt/setup_desktop.sh | bash
+     ```
+   - **Windows:** open PowerShell and paste
+     ```
+     irm https://raw.githubusercontent.com/lakshmipavanipv/Housing-Ads/claude/awesome-cannon-7zgrea/job-hunt/setup_desktop.ps1 | iex
+     ```
+   Re-running it later updates the code and leaves your private files alone.
+4. Copy your original resume to `job-hunt/private/resume/original.docx` and run `.venv/bin/python job-hunt/tailor_resume.py base` (Windows: `.venv\Scripts\python job-hunt\tailor_resume.py base`). Then fill in the empty fields in `job-hunt/private/applicant-profile.yaml`: phone, city, notice period, CTC, PIN code and so on.
 5. In the Claude desktop app, create a **Scheduled task** that runs daily at 09:00, with the repo folder as its working folder and this prompt:
    > Run the daily job-hunt agent: follow job-hunt/AGENT_DAILY.md exactly, using Claude in Chrome and the Gmail connector.
 6. **First run:** watch it once with `daily_apply_cap: 2` in `profile.yaml`. When it looks right, set the cap back to 30.
@@ -51,3 +46,4 @@ This repo is **public**. Your resume, tracker and form answers live in `job-hunt
 | `tracker.py` | Excel tracker of every job (Queued / Applied / Skipped / Interview / Rejected / Offer) |
 | `applicant-profile.example.yaml` | Template for the answers used on application forms |
 | `AGENT_DAILY.md` | Step-by-step instructions the daily agent follows |
+| `setup_desktop.sh` / `setup_desktop.ps1` | One-command laptop installer (Mac / Windows) |
