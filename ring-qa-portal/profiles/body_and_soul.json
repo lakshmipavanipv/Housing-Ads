@@ -1,0 +1,42 @@
+{
+  "model": "Body & Soul Ring",
+  "note": "PLACEHOLDER UUIDs except battery (standard 0x180F/0x2A19). Replace with the values from the Body & Soul app on the Connection page.",
+  "name_prefix": "",
+  "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb",
+  "vars": {
+    "battery":   {"service": "0000180f-0000-1000-8000-00805f9b34fb", "char": "00002a19-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": false},
+    "time":      {"char": "0000fff1-0000-1000-8000-00805f9b34fb", "op": "read_write", "parser": "unix_time_le", "placeholder": true},
+    "timezone":  {"char": "0000fff2-0000-1000-8000-00805f9b34fb", "op": "read_write", "parser": "int16_le", "placeholder": true},
+    "mode":      {"char": "0000fff3-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
+                  "commands": {"time": "01", "counter": "02", "steps": "03", "hr": "04", "spo2": "05", "sleep": "06", "battery": "07"}},
+    "power":     {"char": "0000fff4-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
+                  "commands": {"off": "00", "on": "01"}},
+    "vibration": {"char": "0000fff5-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
+                  "commands": {"start": "01", "stop": "00"}},
+    "oled":      {"char": "0000fff6-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
+                  "commands": {"blink": "01", "stop": "00"}},
+    "hr":        {"char": "0000fff7-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
+    "spo2":      {"char": "0000fff8-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
+    "hrv":       {"char": "0000fff9-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
+    "steps":     {"char": "0000fffa-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint32_le", "placeholder": true},
+    "count":     {"char": "0000fffb-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint32_le", "placeholder": true},
+    "sleep":     {"char": "0000fffc-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint16_le", "placeholder": true}
+  },
+  "rules": {
+    "spec_full_charge_min": 60,
+    "battery_interval_s": 60,
+    "battery_variance_pct": 20,
+    "battery_stall_min": 10,
+    "time_tolerance_s": 2,
+    "live_interval_s": 10,
+    "live_duration_s": 120,
+    "live_no_data_s": 30,
+    "hr": [40, 180],
+    "spo2": [90, 100],
+    "hrv": [1, 250],
+    "buzz_repeat_s": 2,
+    "connect_parallel": 3,
+    "scan_timeout_s": 6,
+    "op_timeout_s": 10
+  }
+}
