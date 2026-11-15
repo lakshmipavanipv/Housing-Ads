@@ -148,6 +148,16 @@ class MockBackend(BaseBackend):
         self.speed = speed
         self.rings = {r.addr: r for r in (MockRing(i + 1) for i in range(n))}
         self.connected = set()
+        self.cmd_cbs = {}
+
+    def _p(self):
+        return self.store.active
+
+    def _apply_cmd(self, r, name, cmd):
+        if name == "mode" and cmd:
+            r.mode = cmd
+        elif name == "power":
+            r.on = cmd != "off"
 
     def _var_for(self, char):
         for k, v in self.store.active["vars"].items():
@@ -190,20 +200,36 @@ class MockBackend(BaseBackend):
 
     async def write(self, addr, service, char, data, response=True):
         r = self._ring(addr)
+        if char.lower() == (self._p().get("cmd_char") or "").lower():
+            await asyncio.sleep(0.02)
+            for k, v in self._p()["vars"].items():
+                if v.get("op") == "command" and data and int(str(v["opcode"]), 16) == data[0]:
+                    cb = self.cmd_cbs.get(addr)
+                    if cb and r.on:
+                        off = int(v.get("resp_offset", 1))
+                        resp = bytes([data[0]]) + b"\x00" * (off - 1) + parsers.encode(v["parser"], r.value(k, self.speed))
+                        asyncio.get_running_loop().call_later(0.05, cb, resp)
+                    return
+            for k, v in self._p()["vars"].items():
+                for cname, h in (v.get("commands") or {}).items():
+                    if bytes.fromhex(h) == data:
+                        self._apply_cmd(r, k, cname)
+                        return
+            return
         name, v = self._var_for(char)
         await asyncio.sleep(0.02)
         cmds = v.get("commands") or {}
         if cmds:
-            cmd = next((k for k, h in cmds.items() if bytes.fromhex(h) == data), None)
-            if name == "mode" and cmd:
-                r.mode = cmd
-            elif name == "power":
-                r.on = cmd != "off"
+            self._apply_cmd(r, name, next((k for k, h in cmds.items() if bytes.fromhex(h) == data), None))
             return
         r.set_value(name, parsers.decode(v["parser"], data))
 
     async def start_notify(self, addr, service, char, cb):
         r = self._ring(addr)
+        nch = self._p().get("notify_char") or self._p().get("cmd_char") or ""
+        if char.lower() == nch.lower():
+            self.cmd_cbs[addr] = cb
+            return
         name, v = self._var_for(char)
 
         async def loop():

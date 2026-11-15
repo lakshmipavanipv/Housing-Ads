@@ -257,6 +257,9 @@ class StageEngine:
                     row["samples"].append([now, v])
                     row["current"] = v
                     row["last_data_t"] = now
+                op = self.mgr.profile.get("vars", {}).get(var, {}).get("opcode")
+                if op:
+                    row["raw"] = self.mgr.rings.get(a, {}).get("raw", {}).get(f"{int(str(op), 16):02x}")
                 vals = [x for _, x in row["samples"] if isinstance(x, (int, float))]
                 if vals:
                     row.update(avg=round(statistics.mean(vals), 1), min=min(vals), max=max(vals))

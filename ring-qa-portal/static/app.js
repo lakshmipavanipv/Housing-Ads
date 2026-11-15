@@ -10,7 +10,7 @@ const LIVE = {count: 'Count', steps: 'Steps', hr: 'Heart rate (bpm)', spo2: 'SpO
 const MODES = [['time', 'Time'], ['counter', 'Counter'], ['steps', 'Steps'], ['hr', 'HR'], ['spo2', 'SpO2'],
   ['sleep', 'Sleep'], ['battery', 'Battery'], ['off', 'Switch Off'], ['on', 'Switch On']];
 const PARSERS = ['uint8', 'int8', 'uint16_le', 'int16_le', 'uint32_le', 'int32_le', 'unix_time_le', 'hr_measurement', 'ascii', 'raw_hex'];
-const OPS = ['read', 'write', 'read_write', 'notify'];
+const OPS = ['command', 'read', 'write', 'read_write', 'notify'];
 
 async function api(path, body, method) {
   const opt = {method: method || (body === undefined ? 'GET' : 'POST'), headers: {'Content-Type': 'application/json'}};
@@ -175,25 +175,34 @@ async function loadProfileForm() {
   $('#profForm').innerHTML = `${anyPh ? '<div class="warn">Rows marked in yellow still have PLACEHOLDER UUIDs. Enter the values from the Body &amp; Soul app, untick "placeholder" and Save.</div>' : ''}
     <div class="bar"><label>Model name <input id="pModel" value="${esc(p.model)}"></label>
     <label>BLE name prefix filter <input id="pPrefix" value="${esc(p.name_prefix)}" placeholder="(all devices)"></label>
-    <label>Default service UUID <input id="pSvc" size="38" value="${esc(p.service_uuid)}"></label></div>
-    <div class="tblwrap"><table><thead><tr><th>Variable</th><th>Service UUID (blank = default)</th><th>Characteristic UUID</th><th>Op</th><th>Parser</th><th>Commands (name=hex, …)</th><th>Placeholder</th></tr></thead><tbody>
+    <label>Service UUID <input id="pSvc" size="38" value="${esc(p.service_uuid)}"></label></div>
+    <div class="bar"><label>Command write char <input id="pCmd" size="38" value="${esc(p.cmd_char || '')}"></label>
+    <label>Response notify char <input id="pNot" size="38" value="${esc(p.notify_char || '')}"></label></div>
+    ${p.note ? `<div class="info">${esc(p.note)}</div>` : ''}
+    <div class="tblwrap"><table><thead><tr><th>Variable</th><th>Service UUID (blank = default)</th><th>Characteristic UUID</th><th>Op</th><th>Opcode</th><th>Args (hex)</th><th>Resp. byte offset</th><th>Parser</th><th>Commands (name=hex, …)</th><th>Placeholder</th><th>Note</th></tr></thead><tbody>
     ${Object.entries(vars).map(([k, v]) => `<tr class="${v.placeholder ? 'ph' : ''}" data-var="${esc(k)}">
       <td><b>${esc(k)}</b></td>
       <td><input data-f="service" size="36" value="${esc(v.service || '')}"></td>
       <td><input data-f="char" size="36" value="${esc(v.char || '')}"></td>
       <td><select data-f="op">${OPS.map(o => `<option ${o === v.op ? 'selected' : ''}>${o}</option>`).join('')}</select></td>
+      <td><input data-f="opcode" size="4" value="${esc(v.opcode || '')}"></td>
+      <td><input data-f="args" size="8" value="${esc(v.args || '')}"></td>
+      <td><input data-f="resp_offset" type="number" min="0" style="width:60px" value="${esc(v.resp_offset ?? '')}"></td>
       <td><select data-f="parser">${PARSERS.map(o => `<option ${o === v.parser ? 'selected' : ''}>${o}</option>`).join('')}</select></td>
       <td><input data-f="commands" size="40" value="${esc(Object.entries(v.commands || {}).map(([a, b]) => `${a}=${b}`).join(', '))}"></td>
-      <td><input type="checkbox" data-f="placeholder" ${v.placeholder ? 'checked' : ''}></td></tr>`).join('')}
+      <td><input type="checkbox" data-f="placeholder" ${v.placeholder ? 'checked' : ''}></td><td class="mac">${esc(v.note || '')}</td></tr>`).join('')}
     </tbody></table></div>
     <h3>Pass/fail rules and timings</h3><textarea id="pRules" rows="9">${esc(JSON.stringify(p.rules || {}, null, 2))}</textarea>`;
 }
 function collectProfile() {
   const p = structuredClone(S.profile.profile);
   p.model = $('#pModel').value.trim(); p.name_prefix = $('#pPrefix').value.trim(); p.service_uuid = $('#pSvc').value.trim();
+  p.cmd_char = $('#pCmd').value.trim(); p.notify_char = $('#pNot').value.trim();
   document.querySelectorAll('#profForm tr[data-var]').forEach(tr => {
     const v = p.vars[tr.dataset.var], f = n => tr.querySelector(`[data-f=${n}]`);
     v.service = f('service').value.trim() || undefined; v.char = f('char').value.trim();
+    v.opcode = f('opcode').value.trim().replace(/^0x/i, '') || undefined; v.args = f('args').value.trim() || undefined;
+    v.resp_offset = f('resp_offset').value === '' ? undefined : +f('resp_offset').value;
     v.op = f('op').value; v.parser = f('parser').value; v.placeholder = f('placeholder').checked;
     const cmds = f('commands').value.split(',').map(s => s.trim()).filter(Boolean);
     if (cmds.length) {
@@ -287,7 +296,7 @@ for (const [k, label] of Object.entries(LIVE)) {
       setInfo(stageInfo(k, `ping every ${s.interval_s || 10} s for ${s.duration_s || 120} s · ${counts(k)}`));
       table([
         {h: 'Bluetooth ring', v: ringCell},
-        {h: 'Live value', cls: 'num', v: r => { const x = srow(k, r.addr); return x.current != null ? `<b>${x.current}</b>` : (x.error ? badge('FAIL: ' + x.error) : '—'); }},
+        {h: 'Live value', cls: 'num', v: r => { const x = srow(k, r.addr); return (x.current != null ? `<b>${esc(x.current)}</b>` : (x.error ? badge('FAIL: ' + x.error) : '—')) + (x.raw ? `<div class="mac" title="raw response bytes">raw ${esc(x.raw)}</div>` : ''); }},
         {h: 'Live trend', chart: r => srow(k, r.addr).samples},
         {h: 'Min / Max', cls: 'num', v: r => { const x = srow(k, r.addr); return x.min != null ? `${x.min} / ${x.max}` : '—'; }},
         {h: 'Samples', cls: 'num', v: r => String((srow(k, r.addr).samples || []).length)},

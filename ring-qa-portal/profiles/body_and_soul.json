@@ -1,26 +1,150 @@
 {
   "model": "Body & Soul Ring",
-  "note": "PLACEHOLDER UUIDs except battery (standard 0x180F/0x2A19). Replace with the values from the Body & Soul app on the Connection page.",
+  "note": "Opcodes from the Body & Soul app table (command channel: service FF00, write FF01). FF02 notify characteristic, response byte offsets/parsers, vibration/screen arguments and the time/timezone/mode/power entries are NOT confirmed yet - check the Raw bytes shown on the live tabs and adjust here.",
   "name_prefix": "",
-  "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb",
+  "service_uuid": "0000ff00-0000-1000-8000-00805f9b34fb",
   "vars": {
-    "battery":   {"service": "0000180f-0000-1000-8000-00805f9b34fb", "char": "00002a19-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": false},
-    "time":      {"char": "0000fff1-0000-1000-8000-00805f9b34fb", "op": "read_write", "parser": "unix_time_le", "placeholder": true},
-    "timezone":  {"char": "0000fff2-0000-1000-8000-00805f9b34fb", "op": "read_write", "parser": "int16_le", "placeholder": true},
-    "mode":      {"char": "0000fff3-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
-                  "commands": {"time": "01", "counter": "02", "steps": "03", "hr": "04", "spo2": "05", "sleep": "06", "battery": "07"}},
-    "power":     {"char": "0000fff4-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
-                  "commands": {"off": "00", "on": "01"}},
-    "vibration": {"char": "0000fff5-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
-                  "commands": {"start": "01", "stop": "00"}},
-    "oled":      {"char": "0000fff6-0000-1000-8000-00805f9b34fb", "op": "write", "parser": "raw_hex", "placeholder": true,
-                  "commands": {"blink": "01", "stop": "00"}},
-    "hr":        {"char": "0000fff7-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
-    "spo2":      {"char": "0000fff8-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
-    "hrv":       {"char": "0000fff9-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint8", "placeholder": true},
-    "steps":     {"char": "0000fffa-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint32_le", "placeholder": true},
-    "count":     {"char": "0000fffb-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint32_le", "placeholder": true},
-    "sleep":     {"char": "0000fffc-0000-1000-8000-00805f9b34fb", "op": "read", "parser": "uint16_le", "placeholder": true}
+    "battery": {
+      "service": "0000180f-0000-1000-8000-00805f9b34fb",
+      "char": "00002a19-0000-1000-8000-00805f9b34fb",
+      "op": "read",
+      "parser": "uint8",
+      "placeholder": false
+    },
+    "firmware": {
+      "op": "command",
+      "opcode": "00",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "Read firmware info 0x00"
+    },
+    "hr": {
+      "op": "command",
+      "opcode": "b9",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "Heart rate 0xB9 - confirm response format"
+    },
+    "spo2": {
+      "op": "command",
+      "opcode": "c0",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "SpO2/stress 0xC0 - confirm which byte is SpO2"
+    },
+    "hrv": {
+      "op": "command",
+      "opcode": "91",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "HRV 0x91 - confirm response format"
+    },
+    "sleep": {
+      "op": "command",
+      "opcode": "bf",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint16_le",
+      "placeholder": false,
+      "note": "Sleep 0xBF - confirm response format"
+    },
+    "count": {
+      "op": "command",
+      "opcode": "b7",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint16_le",
+      "placeholder": false,
+      "note": "Prayer count 0xB7 - confirm response format"
+    },
+    "steps": {
+      "op": "command",
+      "opcode": "72",
+      "args": "",
+      "resp_offset": 1,
+      "parser": "uint32_le",
+      "placeholder": true,
+      "note": "Sports records 0x72 - steps byte position unconfirmed"
+    },
+    "vibration": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": true,
+      "note": "Find-ring vibration 0xDF (or 0xF9); start/stop argument bytes unconfirmed",
+      "commands": {
+        "start": "df01",
+        "stop": "df00"
+      }
+    },
+    "oled": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": true,
+      "note": "Screen-on time 0xDC used to light the screen; argument unconfirmed",
+      "commands": {
+        "blink": "dc05",
+        "stop": "dc00"
+      }
+    },
+    "brightness": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": true,
+      "note": "Brightness 0xDB; argument unconfirmed",
+      "commands": {
+        "low": "db01",
+        "high": "db05"
+      }
+    },
+    "time": {
+      "char": "0000fff1-0000-1000-8000-00805f9b34fb",
+      "op": "read_write",
+      "parser": "unix_time_le",
+      "placeholder": true,
+      "note": "Not in the opcode table - still a placeholder"
+    },
+    "timezone": {
+      "char": "0000fff2-0000-1000-8000-00805f9b34fb",
+      "op": "read_write",
+      "parser": "int16_le",
+      "placeholder": true,
+      "note": "Not in the opcode table - still a placeholder"
+    },
+    "mode": {
+      "char": "0000fff3-0000-1000-8000-00805f9b34fb",
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": true,
+      "commands": {
+        "time": "01",
+        "counter": "02",
+        "steps": "03",
+        "hr": "04",
+        "spo2": "05",
+        "sleep": "06",
+        "battery": "07"
+      },
+      "note": "Not in the opcode table - still a placeholder"
+    },
+    "power": {
+      "char": "0000fff4-0000-1000-8000-00805f9b34fb",
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": true,
+      "commands": {
+        "off": "00",
+        "on": "01"
+      },
+      "note": "Not in the opcode table - still a placeholder"
+    }
   },
   "rules": {
     "spec_full_charge_min": 60,
@@ -31,12 +155,23 @@
     "live_interval_s": 10,
     "live_duration_s": 120,
     "live_no_data_s": 30,
-    "hr": [40, 180],
-    "spo2": [90, 100],
-    "hrv": [1, 250],
+    "hr": [
+      40,
+      180
+    ],
+    "spo2": [
+      90,
+      100
+    ],
+    "hrv": [
+      1,
+      250
+    ],
     "buzz_repeat_s": 2,
     "connect_parallel": 3,
     "scan_timeout_s": 6,
-    "op_timeout_s": 10
-  }
+    "op_timeout_s": 5
+  },
+  "cmd_char": "0000ff01-0000-1000-8000-00805f9b34fb",
+  "notify_char": "0000ff02-0000-1000-8000-00805f9b34fb"
 }

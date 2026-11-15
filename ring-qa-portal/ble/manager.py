@@ -12,6 +12,8 @@ class RingManager:
         self._locks = {}
         self._buzz = {}       # addr -> asyncio.Task
         self._notify = {}     # (addr, var) -> latest value
+        self._cmd_sub = set()  # rings subscribed to the command-response notify characteristic
+        self._cmd_wait = {}    # (addr, opcode) -> Future waiting for the response
         self.scanning = False
 
     # ---------- profile helpers ----------
@@ -48,6 +50,7 @@ class RingManager:
             t.cancel()
         self._buzz.clear()
         self._notify.clear()
+        self._cmd_sub.clear()
         self.rings.clear()
         self.backend = backend
 
@@ -99,6 +102,7 @@ class RingManager:
                 pass
             self.rings[a]["connected"] = False
         self._notify.clear()
+        self._cmd_sub.clear()
 
     def ring_list(self):
         out = []
@@ -114,8 +118,42 @@ class RingManager:
         async with self._lock(addr):
             return await asyncio.wait_for(self._b().read(addr, self._svc(v), v["char"]), self._t())
 
+    # ---------- opcode command channel (e.g. write 0xB9 to FF01, response arrives as notification) ----------
+    async def _ensure_cmd_notify(self, addr):
+        if addr in self._cmd_sub:
+            return
+        nch = self.profile.get("notify_char") or self.profile.get("cmd_char")
+
+        def cb(data, addr=addr):
+            if not data:
+                return
+            r = self.rings.get(addr)
+            if r is not None:
+                r.setdefault("raw", {})[f"{data[0]:02x}"] = data.hex()
+            fut = self._cmd_wait.get((addr, data[0]))
+            if fut and not fut.done():
+                fut.set_result(data)
+
+        async with self._lock(addr):
+            await asyncio.wait_for(self._b().start_notify(addr, self.profile.get("service_uuid"), nch, cb), self._t())
+        self._cmd_sub.add(addr)
+
+    async def command(self, addr, v):
+        op = int(str(v["opcode"]), 16)
+        await self._ensure_cmd_notify(addr)
+        fut = asyncio.get_running_loop().create_future()
+        self._cmd_wait[(addr, op)] = fut
+        try:
+            await self._write(addr, v, bytes([op]) + bytes.fromhex(v.get("args") or ""))
+            return await asyncio.wait_for(fut, self._t())
+        finally:
+            self._cmd_wait.pop((addr, op), None)
+
     async def read_var(self, addr, name):
         v = self.var(name)
+        if v.get("op") == "command":
+            data = await self.command(addr, v)
+            return parsers.decode(v["parser"], data[int(v.get("resp_offset", 1)):])
         if v.get("op") == "notify":
             key = (addr, name)
             if key not in self._notify:
@@ -138,7 +176,7 @@ class RingManager:
     async def _write(self, addr, v, data):
         async with self._lock(addr):
             await asyncio.wait_for(
-                self._b().write(addr, self._svc(v), v["char"], data, v.get("write_response", True)), self._t())
+                self._b().write(addr, self._svc(v), v.get("char") or self.profile.get("cmd_char"), data, v.get("write_response", True)), self._t())
 
     async def write_var(self, addr, name, value):
         v = self.var(name)
