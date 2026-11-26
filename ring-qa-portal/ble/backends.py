@@ -249,5 +249,6 @@ def make_backend(mode, store, mock_rings=30, speed=1.0):
     if mode == "mock":
         return MockBackend(store, mock_rings, speed)
     if mode == "dongles":
-        raise RuntimeError("USB dongle mode is not enabled yet - use Local laptop Bluetooth")
+        from .bridge import BridgeBackend
+        return BridgeBackend()
     raise ValueError(f"unknown backend '{mode}'")

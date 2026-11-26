@@ -140,13 +140,11 @@ async function loadBatch(id) {
 V.connection = {
   build: () => `<h2>Connection</h2>
     <div class="card"><h3 style="margin-top:0">Bluetooth adapter</h3>
-      <label class="radio"><input type="radio" name="adapter" value="local"> <b>Local laptop Bluetooth</b> (default)</label>
+      <label class="radio"><input type="radio" name="adapter" value="dongles"> <b>USB ESP32 bridge boards</b> (up to 9 rings per board, bypasses Windows Bluetooth)</label>
+      <label class="radio"><input type="radio" name="adapter" value="local"> Local laptop Bluetooth (about 7 rings max)</label>
       <label class="radio"><input type="radio" name="adapter" value="mock"> Simulator: virtual rings for training and demo</label>
-      <label class="radio"><input type="radio" name="adapter" value="dongles" disabled> USB dongles (3 slots below, not enabled yet)</label>
       <div id="adStatus"></div>
-      <div class="tblwrap" style="margin-top:8px"><table><thead><tr><th>Dongle</th><th>Serial number / COM port</th><th></th><th>Status</th></tr></thead><tbody>
-      ${[1, 2, 3].map(i => `<tr><td>USB dongle ${i}</td><td><input disabled placeholder="e.g. COM${i + 2} / serial"></td><td><button disabled>Connect</button></td><td><span class="badge">Not used: local Bluetooth selected</span></td></tr>`).join('')}
-      </tbody></table></div></div>
+      <div id="dongles" style="margin-top:8px"></div></div>
     <div class="card"><h3 style="margin-top:0">Batch</h3>
       <label>Rings to test in this batch <input id="target" type="number" min="1" style="width:90px"></label>
       <button data-act="saveTarget">Set</button></div>
@@ -165,6 +163,12 @@ V.connection = {
     const h = st.backend_error ? `<div class="err">Adapter error: ${esc(st.backend_error)}</div>`
       : `<div class="info">Active: <b>${st.backend === 'mock' ? 'Simulator' : 'Local laptop Bluetooth'}</b> · rings known ${st.rings.length} · connected ${st.rings.filter(r => r.connected).length} / ${st.ring_target}</div>`;
     if (el._h !== h) { el.innerHTML = h; el._h = h; }
+    const dg = st.dongles || [], dEl = $('#dongles');
+    const dh = `<div class="tblwrap"><table><thead><tr><th>Board</th><th>COM port</th><th>Board Bluetooth ID</th><th>Firmware</th><th>Rings connected</th><th>Status</th><th><button data-act="reconnectBoards">Connect boards</button></th></tr></thead><tbody>${
+      [0, 1, 2].map(i => { const d = dg[i]; return `<tr><td>USB board ${i + 1}</td><td>${esc(d?.port || '—')}</td><td class="mac">${esc(d?.mac || '')}</td><td>${esc(d?.fw || '')}</td><td class="num">${d?.max_conn ? `${d.rings} / ${d.max_conn}` : '—'}</td><td>${
+        !d ? badge(st.backend === 'dongles' ? 'FAIL: not detected' : 'Not used') : d.alive ? badge('Connected') : badge('FAIL: ' + (d.error || 'offline'))}</td><td></td></tr>`; }).join('')
+    }</tbody></table></div>`;
+    if (dEl && dEl._h !== dh) { dEl.innerHTML = dh; dEl._h = dh; }
   },
 };
 async function loadProfileForm() {
@@ -330,6 +334,7 @@ const A = {
   save: async d => { const r = await api('/api/save', {stage: d.stage, ...who()}); toast(`Saved ${r.saved} ring results to batch "${who().batch}"`); },
   refreshHome: loadHome,
   viewBatch: d => loadBatch(d.id),
+  reconnectBoards: async () => { const r = await api('/api/backend', {mode: 'dongles'}); document.querySelectorAll('input[name=adapter]').forEach(x => { x.checked = x.value === 'dongles'; }); toast(r.error ? 'Boards: ' + r.error : 'Boards connected', !!r.error); },
   saveTarget: async () => { await api('/api/ring_target', {n: +$('#target').value}); toast('Batch ring count set'); },
   loadProfile: async () => { await api('/api/profile/load', {name: $('#profSel').value}); await loadProfileForm(); toast('Model loaded'); },
   saveProfile: async () => { await api('/api/profile', {profile: collectProfile()}, 'PUT'); await loadProfileForm(); toast('Model saved'); },

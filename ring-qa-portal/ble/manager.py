@@ -52,6 +52,8 @@ class RingManager:
         self._notify.clear()
         self._cmd_sub.clear()
         self.rings.clear()
+        if self.backend and hasattr(self.backend, "close"):
+            self.backend.close()
         self.backend = backend
 
     # ---------- discovery / connection ----------

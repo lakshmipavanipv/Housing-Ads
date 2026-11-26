@@ -59,7 +59,8 @@ def bad(e):
 def snapshot():
     return {"backend": APP["backend"], "backend_error": APP["backend_error"], "ring_target": APP["ring_target"],
             "profile_name": store.active_name, "scanning": mgr.scanning, "server_time": time.time(),
-            "rings": mgr.ring_list(), "stages": engine.snapshot()}
+            "rings": mgr.ring_list(), "stages": engine.snapshot(),
+            "dongles": mgr.backend.status() if hasattr(mgr.backend, "status") else []}
 
 
 @app.get("/")
@@ -243,7 +244,8 @@ async def api_profile_load(body: dict = Body(...)):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Ring QA Portal")
-    ap.add_argument("--backend", choices=["local", "mock"], default="local")
+    ap.add_argument("--backend", choices=["local", "mock", "dongles"], default="local",
+                    help="local = laptop Bluetooth, dongles = ESP32 USB bridge boards, mock = simulator")
     ap.add_argument("--rings", type=int, default=30, help="number of simulated rings (mock only)")
     ap.add_argument("--speed", type=float, default=1.0, help="mock time speed-up, e.g. 30 = 1 h in 2 min")
     ap.add_argument("--host", default="127.0.0.1")

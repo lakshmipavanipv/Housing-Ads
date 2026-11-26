@@ -11,11 +11,24 @@ batch reports.
    pip install -r requirements.txt
    ```
 
-## Run
+## 30 rings at once: USB ESP32 bridge boards
+Windows' own Bluetooth can only hold a few rings at a time, so the portal can use ESP32 boards on a USB hub
+as separate Bluetooth radios instead. **Each board holds up to 9 rings (an ESP32 hardware limit): 3 boards = 27 rings,
+4 boards = 36.**
+1. Plug the ESP32 boards into the USB hub. Use a powered hub.
+2. Double-click **`flash_bridges.bat`**, which is needed once per board. It downloads the tools, asks which ESP32 type you
+   have, and flashes `firmware/rqa_bridge` onto every board it finds. If a board fails, hold its **BOOT** button and
+   run it again.
+3. Double-click **`start_portal.bat`**. It installs the Python packages, starts the portal with the boards and opens
+   the browser.
+4. Check the **Connection** page: each board should show its COM port and **Connected**, with rings 0 / 9.
+
+## Run (other modes)
 ```
-python server.py
+python server.py                     (laptop's own Bluetooth)
+python server.py --backend dongles   (ESP32 USB boards)
 ```
-Open **http://localhost:8000** in Chrome or Edge. The portal uses the laptop's own Bluetooth by default.
+Open **http://localhost:8000** in Chrome or Edge.
 
 To try it without any rings, start the simulator with 30 virtual rings. In it, ring 7 does not charge,
 ring 13's HR sensor is dead and ring 21 will not connect. `--speed 30` makes one hour pass in two minutes:
@@ -48,7 +61,6 @@ and the PASS/FAIL rules and timings. Use **Save as new model** for another ring 
 values from the Body & Soul app before testing real rings.
 
 ## Notes
-- Windows' Bluetooth stack can hold only a limited number of simultaneous connections (often about 7–10, depending on the
-  adapter). The USB-dongle slots on the Connection page are reserved for multi-dongle support later.
+- Windows' Bluetooth stack can hold only a limited number of simultaneous connections (often about 7). Use the ESP32 boards.
 - Results are stored in `qa.db` (SQLite) in this folder.
 - Unit tests: `python -m pytest tests`
