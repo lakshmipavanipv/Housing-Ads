@@ -41,15 +41,15 @@ if (-not $Fqbn) {
 }
 
 $sketch = Join-Path $here "firmware\rqa_bridge"
-$build  = Join-Path $tools "build"
-Write-Host "Compiling firmware for $Fqbn ..." -ForegroundColor Cyan
-Run @("compile", "--fqbn", $Fqbn, "--build-path", $build,
-      "--build-property", "compiler.cpp.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9",
-      "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9", $sketch)
-
+# COM port -> does the board use the chip's own USB (Espressif VID 303A, e.g. ESP32-C3 SuperMini)?
+$native = @{}
+Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match '\(COM\d+\)' } | ForEach-Object {
+  $native[[regex]::Match($_.Name, 'COM\d+').Value] = ($_.PNPDeviceID -match 'VID_303A')
+}
 if (-not $Ports) {
   $Ports = Get-CimInstance Win32_PnPEntity |
-    Where-Object { $_.Name -match '\(COM\d+\)' -and $_.Name -match 'CP210|CH340|CH910|CH9102|USB-SERIAL|USB Serial|USB JTAG|FTDI' } |
+    Where-Object { $_.Name -match '\(COM\d+\)' -and ($_.PNPDeviceID -match 'VID_(10C4|1A86|0403|303A)' -or
+                   $_.Name -match 'CP210|CH340|CH910|CH9102|USB-SERIAL|USB JTAG|FTDI') } |
     ForEach-Object { [regex]::Match($_.Name, 'COM\d+').Value } | Sort-Object -Unique
 }
 if (-not $Ports) { throw "No ESP32 COM ports found. Check Device Manager > Ports (COM & LPT) and the USB hub power." }
@@ -59,10 +59,28 @@ Write-Host "ESP32 boards found on: $($Ports -join ', ')" -ForegroundColor Yellow
 $ok = Read-Host "Flash the bridge firmware to ALL of these ports? (Y/N)"
 if ($ok -notmatch '^[Yy]') { Write-Host "Cancelled."; exit 1 }
 
+# Two firmware variants: boards with a USB-serial chip (CP210x/CH340) and boards using the chip's own USB,
+# which need "USB CDC on boot" so the portal can talk to them over the USB cable.
+$builds = @{}
+function Build-For([bool]$isNative) {
+  $fq = $Fqbn
+  if ($isNative -and $Fqbn -match 'esp32c3|esp32s3') { $fq = "$Fqbn" + ":CDCOnBoot=cdc" }
+  if (-not $builds.ContainsKey($fq)) {
+    $dir = Join-Path $tools ("build_" + ($fq -replace '[:=]', '_'))
+    Write-Host "Compiling firmware for $fq ..." -ForegroundColor Cyan
+    Run @("compile", "--fqbn", $fq, "--build-path", $dir,
+          "--build-property", "compiler.cpp.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9",
+          "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9", $sketch)
+    $builds[$fq] = $dir
+  }
+  return $fq
+}
+
 $failed = @()
 foreach ($p in $Ports) {
-  Write-Host "Flashing $p ..." -ForegroundColor Cyan
-  & $cli upload -p $p --fqbn $Fqbn --input-dir $build $sketch
+  $fq = Build-For ([bool]$native[$p])
+  Write-Host "Flashing $p ($fq) ..." -ForegroundColor Cyan
+  & $cli upload -p $p --fqbn $fq --input-dir $builds[$fq] $sketch
   if ($LASTEXITCODE -ne 0) { $failed += $p }
 }
 Write-Host ""
