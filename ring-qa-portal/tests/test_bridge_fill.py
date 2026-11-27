@@ -77,3 +77,28 @@ def test_ring_goes_to_first_board_that_heard_it_then_falls_back():
     assert be.route["r1"] is b3 and b1.connected == set() and b2.connected == set()
     asyncio.run(be.connect("r2"))  # heard by nobody: board 1 fails, board 2 takes it
     assert be.route["r2"] is b2 and b1.connected == set()
+
+
+def test_connect_all_36_found_30_target_fills_boards_in_series():
+    """36 rings advertising, target 30, 4 boards of 9: the 30 strongest connect, 9 + 9 + 9 + 3, in order."""
+    from types import SimpleNamespace
+    from ble.manager import RingManager
+
+    boards = [FakeBridge("COM6", 9), FakeBridge("COM7", 9), FakeBridge("COM8", 9), FakeBridge("COM9", 9)]
+    be = make(boards)
+    mgr = RingManager(SimpleNamespace(active={"protocol": "plain", "rules": {"connect_parallel": 2}}))
+    mgr.backend = be
+    for i in range(36):  # ring i has rssi -40 - i: rings 0-29 are the strongest
+        a = f"38:00:00:00:00:{i:02x}"
+        mgr.rings[a] = {"addr": a, "name": "SR16", "unit_id": f"R{i + 1:03d}", "found": True, "rssi": -40 - i,
+                        "connected": False}
+
+    n = asyncio.run(mgr.connect_all(30))
+    assert n == 30
+    assert [len(b.connected) for b in boards] == [9, 9, 9, 3]
+    strongest = [f"38:00:00:00:00:{i:02x}" for i in range(30)]
+    assert {a for a, r in mgr.rings.items() if r["connected"]} == set(strongest)
+    for k, b in enumerate(boards):  # in series: 1-9, 10-18, 19-27, 28-30
+        assert b.connected == set(strongest[9 * k:9 * k + 9])
+    on = [a for b in boards for a in b.connected]
+    assert len(on) == len(set(on)) == 30  # never one ring on two boards

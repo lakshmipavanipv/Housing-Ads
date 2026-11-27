@@ -136,7 +136,7 @@ async def api_connect(body: dict = Body(...)):
 async def api_connect_all():
     if not mgr.rings:
         raise bad("No rings found yet - click Search first")
-    n = await mgr.connect_all()
+    n = await mgr.connect_all(APP["ring_target"])
     return {"connected": n, "total": len(mgr.rings)}
 
 

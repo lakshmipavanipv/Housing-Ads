@@ -42,7 +42,8 @@ function parseTz(s) {
   return (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3] || '0', 10));
 }
 const badge = s => { s = s || 'PENDING'; return `<span class="badge b-${esc(s.split(/[ :]/)[0])}" title="${esc(s)}">${esc(s)}</span>`; };
-const rows = () => (S.st?.rings || []);
+// every tab: connected rings first (in unit order), not-connected rings always at the bottom
+const rows = () => [...(S.st?.rings || [])].sort((a, b) => (b.connected ? 1 : 0) - (a.connected ? 1 : 0) || String(a.unit_id).localeCompare(String(b.unit_id)));
 const stage = k => S.st?.stages?.[k] || {};
 const srow = (k, addr) => stage(k).rows?.[addr] || {};
 const ringCell = r => `<span class="dot ${r.connected ? 'on' : ''}"></span><b>${esc(r.unit_id)}</b> ${esc(r.name || '(no name)')}<div class="mac">${esc(r.addr)}</div>`;
@@ -245,7 +246,7 @@ V.battery = {
     setInfo(stageInfo('battery', `ping every ${s.interval_s ? Math.round(s.interval_s) + ' s' : '60 s'} · ${counts('battery')}`));
     table([
       {h: 'Bluetooth ring', v: ringCell},
-      {h: 'Status', v: r => { const x = srow('battery', r.addr); const pct = x.current != null ? x.current : r.battery_pct; const st = x.charge_state || (pct == null ? (r.charging ? 'CHARGING' : null) : pct >= 100 ? 'FULLY CHARGED' : r.charging ? 'CHARGING' : 'NEEDS CHARGING'); return st ? `<span class="badge b-${st.split(' ')[0]}">${st === 'CHARGING' ? '⚡ ' : ''}${esc(st)}</span>` : '—'; }},
+      {h: 'Status', v: r => { const x = srow('battery', r.addr); const pct = x.current != null ? x.current : r.battery_pct; const st = x.charge_state || (pct == null ? (r.charging ? 'CHARGING' : null) : pct >= 100 ? 'FULLY CHARGED' : r.charging ? 'CHARGING' : pct < 20 ? 'NEEDS CHARGING' : 'NOT CHARGING'); return st ? `<span class="badge b-${st.split(' ')[0]}">${st === 'CHARGING' ? '⚡ ' : ''}${esc(st)}</span>` : '—'; }},
       {h: 'Current battery', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.current != null ? `<b>${x.current}%</b>` : r.battery_pct != null ? `${r.battery_pct}%` : (x.error ? badge('FAIL: ' + x.error) : '—'); }},
       {h: 'Est. time to 100%', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.current == null ? '—' : x.current >= 100 ? 'Full' : fmtMin(x.eta_min); }},
       {h: 'Reached 100% at', cls: 'num', v: r => fmtT(srow('battery', r.addr).full_at)},

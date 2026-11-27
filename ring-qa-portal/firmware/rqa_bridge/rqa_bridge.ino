@@ -14,9 +14,24 @@
 #include <map>
 #include <string>
 
-#define FW_NAME "RQA-BRIDGE-1.0"
+#define FW_NAME "RQA-BRIDGE-1.1"
 #ifndef CONFIG_BT_NIMBLE_MAX_CONNECTIONS
 #define CONFIG_BT_NIMBLE_MAX_CONNECTIONS 3
+#endif
+
+// The ESP32-C3 radio in the Arduino core is pre-configured for only 6 "air activities" (CONFIG_BT_CTRL_BLE_MAX_ACT=6);
+// scanning takes one, so a board stopped at 5 rings. The chip supports 10 activities. Built for 9 rings + search: tested with
+// 30+ SR16 rings, a 10th link on one board made another ring drop, 9 per board held steady. The value is passed at
+// run time in the controller config, so the build links with -Wl,--wrap=esp_bt_controller_init (see flash_bridges.ps1)
+// and this wrapper raises it before the real init runs. No library files are modified.
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#include <esp_bt.h>
+extern "C" esp_err_t __real_esp_bt_controller_init(esp_bt_controller_config_t* cfg);
+extern "C" esp_err_t __wrap_esp_bt_controller_init(esp_bt_controller_config_t* cfg) {
+  cfg->ble_max_act = CONFIG_BT_NIMBLE_MAX_CONNECTIONS + 1 > BT_CTRL_BLE_MAX_ACT_LIMIT ? BT_CTRL_BLE_MAX_ACT_LIMIT
+                                                                                      : CONFIG_BT_NIMBLE_MAX_CONNECTIONS + 1;
+  return __real_esp_bt_controller_init(cfg);
+}
 #endif
 
 static SemaphoreHandle_t outLock;
@@ -119,8 +134,16 @@ static void handle(char* line) {
       }
       c->setClientCallbacks(&clientCB, false);
       c->setConnectTimeout(10);
+      // 30-50 ms connection interval (units of 1.25 ms), 5 s supervision timeout. Short default intervals make
+      // 9-10 links on one radio collide in airtime, so the last rings fail to connect or drop. QA traffic is tiny.
+      c->setConnectionParams(24, 40, 0, 500);
     }
-    if (!c->connect(addr)) { er("connect failed"); return; }
+    // SR16 rings often reject the first attempt within a second or two ("failed to establish") and accept the next
+    // one. Retry once on such quick failures; a ring that is really out of range times out (10 s) and is not retried.
+    uint32_t t0 = millis();
+    bool up = c->connect(addr);
+    if (!up && millis() - t0 < 6000) { delay(150); up = c->connect(addr); }
+    if (!up) { er("connect failed"); return; }
     for (auto i = clients.begin(); i != clients.end();) {
       if (i->second == c && i->first != key) i = clients.erase(i); else ++i;
     }

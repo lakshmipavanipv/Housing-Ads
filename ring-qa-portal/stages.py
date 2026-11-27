@@ -47,16 +47,17 @@ def battery_update(row, pct, t, rules, scale=1.0, grace_min=1.0):
     return row
 
 
-def charge_state(row, ring_charging):
-    """Battery tab Status column: FULLY CHARGED / CHARGING / NEEDS CHARGING (separate from the PASS/FAIL result)."""
+def charge_state(row, ring_charging, low_pct=20):
+    """Battery tab Status column: FULLY CHARGED / CHARGING / NEEDS CHARGING / NOT CHARGING (separate from PASS/FAIL).
+    NEEDS CHARGING only for a low battery (below low_pct); a ring at e.g. 86 % that is off the charger is NOT CHARGING."""
     pct = row.get("current")
     if pct is None:
         return None
     if pct >= 100:
         return "FULLY CHARGED"
-    s = row.get("samples", [])
-    rising = len(s) >= 2 and s[-1][1] > s[0][1]
-    return "CHARGING" if ring_charging or rising else "NEEDS CHARGING"
+    if ring_charging:
+        return "CHARGING"
+    return "NEEDS CHARGING" if pct < low_pct else "NOT CHARGING"
 
 
 def live_eval(var, row, rules, now, final=False):
@@ -181,7 +182,8 @@ class StageEngine:
                     continue
                 row.pop("error", None)
                 battery_update(row, int(pct), now, self.rules, self.time_scale, grace)
-                row["charge_state"] = charge_state(row, self.mgr.rings.get(a, {}).get("charging"))
+                row["charge_state"] = charge_state(row, self.mgr.rings.get(a, {}).get("charging"),
+                                                   float(self.rules.get("low_battery_pct", 20)))
             st["last_poll"] = now
             if st["rows"] and all(is_done(r.get("status")) for r in st["rows"].values()):
                 break

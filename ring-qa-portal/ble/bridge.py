@@ -271,4 +271,4 @@ class BridgeBackend(BaseBackend):
     async def start_notify(self, addr, service, char, cb):
         b = self._b(addr)
         b.ntf_cbs[(addr, norm_uuid(char))] = cb
-        await b.cmd(f"SUB {addr} {self._s(addr, service)} {char}")
+        await b.cmd(f"SUB {addr} {self._s(addr, service)} {char}", 15)  # first SUB discovers services: slow on a busy board

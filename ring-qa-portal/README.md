@@ -13,8 +13,10 @@ batch reports.
 
 ## 30 rings at once: USB ESP32 bridge boards
 Windows' own Bluetooth can only hold a few rings at a time, so the portal can use ESP32 boards on a USB hub
-as separate Bluetooth radios instead. **Each board holds up to 9 rings (an ESP32 hardware limit): 3 boards = 27 rings,
-4 boards = 36.**
+as separate Bluetooth radios instead. **Each board holds 9 rings (tested limit of the ESP32-C3 radio: a 10th ring makes another one drop). 3 boards = 27
+rings, 4 boards = 36, so use 4 boards for a 30-ring batch.** Boards fill in order: board 1 takes the 9 strongest rings,
+then board 2, board 3, board 4, and a ring is never on two boards. Connect all picks the strongest-signal rings up to
+the batch size, so stock lying nearby is ignored.
 1. Plug the ESP32 boards into the USB hub. Use a powered hub.
 2. Double-click **`flash_bridges.bat`**, which is needed once per board. It downloads the tools, asks which ESP32 type you
    have, and flashes `firmware/rqa_bridge` onto every board it finds. If a board fails, hold its **BOOT** button and

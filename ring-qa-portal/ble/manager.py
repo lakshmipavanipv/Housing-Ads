@@ -95,23 +95,53 @@ class RingManager:
                     await asyncio.wait_for(b.connect(addr), 20)
             self._cmd_sub.discard(addr)
             if self._jieli():
-                await self._ensure_cmd_notify(addr)  # ring frames must be ACKed from the start
+                try:
+                    await self._ensure_cmd_notify(addr)  # ring frames must be ACKed from the start
+                except Exception:
+                    # The link is up but setup failed. Drop the link, otherwise the ring keeps holding a board slot
+                    # while the portal shows it as not connected (boards then fill up with "ghost" rings).
+                    try:
+                        await self._b().disconnect(addr)
+                    except Exception:
+                        pass
+                    raise
             r["connected"], r["error"], r["keep"] = True, None, True
             r["last_io"] = time.time()
         except Exception as e:
-            r["connected"], r["error"] = False, f"{type(e).__name__}: {e}"
+            r["connected"], r["error"] = False, f"{type(e).__name__}: {e}" + (
+                "" if str(e) else "timed out")
         return r["connected"]
 
-    async def connect_all(self):
-        sem = asyncio.Semaphore(int(self.rules.get("connect_parallel", 3)))
+    async def connect_all(self, target=None):
+        """Connect up to `target` rings. Rings on the test tray are the closest, so the strongest signal goes first;
+        a ring that fails is skipped and the next strongest is tried, until the target is reached or nobody is left.
+        Without this, a room full of stock (hundreds of advertising rings) is tried in random order."""
+        n_par = int(self.rules.get("connect_parallel", 3))
+        if hasattr(self.backend, "bridges"):  # one connect at a time per board, all boards working in parallel
+            n_par = max(n_par, len([b for b in self.backend.bridges if b.alive]))
+        connected = lambda: sum(1 for r in self.rings.values() if r.get("connected"))
+        todo = sorted((a for a, r in self.rings.items() if r.get("found") and not r.get("connected")),
+                      key=lambda a: self.rings[a].get("rssi") if self.rings[a].get("rssi") is not None else -200,
+                      reverse=True)
+        busy = 0
 
-        async def one(a):
-            async with sem:
-                return await self.connect(a)
+        async def worker():
+            nonlocal busy
+            while todo and (target is None or connected() + busy < target):
+                a = todo.pop(0)
+                busy += 1
+                try:
+                    await self.connect(a)
+                finally:
+                    busy -= 1
 
-        todo = [a for a, r in self.rings.items() if not r.get("connected")]
-        await asyncio.gather(*(one(a) for a in todo))
-        return sum(1 for r in self.rings.values() if r.get("connected"))
+        await asyncio.gather(*(worker() for _ in range(n_par)))
+        if target is None or connected() < target:  # one more pass for rings that failed (often busy, not broken)
+            todo = sorted((a for a, r in self.rings.items() if r.get("found") and not r.get("connected")),
+                          key=lambda a: self.rings[a].get("rssi") if self.rings[a].get("rssi") is not None else -200,
+                          reverse=True)
+            await asyncio.gather(*(worker() for _ in range(n_par)))
+        return connected()
 
     async def disconnect_all(self):
         for a in list(self.rings):
@@ -242,7 +272,13 @@ class RingManager:
                 fut.set_result(data)
 
         async with self._lock(addr):
-            await asyncio.wait_for(self._b().start_notify(addr, self.profile.get("service_uuid"), nch, cb), self._t())
+            sub = self._b().start_notify(addr, self.profile.get("service_uuid"), nch, cb)
+            if getattr(self._b(), "own_timeouts", False):
+                # ESP32 boards run one command at a time; while a board connects other rings this waits in line.
+                # The board command has its own timeout that only starts when the board takes it.
+                await sub
+            else:
+                await asyncio.wait_for(sub, self._t())
         self._cmd_sub.add(addr)
 
     # ---------- SR16 live push (HR) and stored history (SpO2 / HRV) ----------
@@ -274,21 +310,24 @@ class RingManager:
                 p[1].set_result(True)
 
     def _battery_trend(self, addr, pct, mv):
-        """No charging flag exists in the SR16 battery reply ([%, mV]); a ring on the charger shows a rising
-        voltage/percentage, so flag it as charging when that trend holds over ~20-90 s."""
+        """No charging flag exists in the SR16 battery reply ([%, mV]), so charging is inferred from the trend:
+        the percentage must really climb (>= charge_rise_pct points, default 2, against a reading at least a minute
+        old within the last 5 min). Not used any more: a voltage-above-resting test (healthy rings off the charger
+        sit at ~4.3 V at 86 %, so it flagged them as charging) and a 1-point rise (normal jitter of the reading)."""
         r = self.rings.get(addr)
         if r is None:
             return
         now = time.time()
-        h = [x for x in r.setdefault("batt_hist", []) if now - x[0] <= 90] + [(now, pct, mv)]
+        h = [x for x in r.setdefault("batt_hist", []) if now - x[0] <= 300] + [(now, pct, mv)]
         r["batt_hist"] = h
         r["battery_pct"], r["battery_mv"] = pct, mv
-        # resting voltage measured on SR16 rings off the charger: ~3.69 V at 9 %, ~3.80 V at 25 %, ~3.96 V at 88 %
-        rest_mv = 3680 + 3.3 * pct
-        above = mv - rest_mv >= float(self.rules.get("charge_mv_above_rest", 150))
-        old = [x for x in h if now - x[0] >= 20]
-        rose = bool(old) and pct > old[0][1]
-        r["charging"] = above or rose
+        old = [x[1] for x in h if now - x[0] >= 60]
+        need = float(self.rules.get("charge_rise_pct", 2))
+        if old and pct - min(old) >= need:
+            r["charging"] = True
+        elif old and pct < max(old) or not old and not r.get("charging"):
+            r["charging"] = False  # falling (or no trend yet): not on the charger
+        # flat with an earlier detected rise: keep the last state (a charging ring can sit on one % for a while)
 
     @staticmethod
     def _push_value(v, payload):

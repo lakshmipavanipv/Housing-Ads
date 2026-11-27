@@ -71,7 +71,9 @@ function Build-For([bool]$isNative) {
     Write-Host "Compiling firmware for $fq ..." -ForegroundColor Cyan
     Run @("compile", "--fqbn", $fq, "--build-path", $dir,
           "--build-property", "compiler.cpp.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9",
-          "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9", $sketch) | Out-Host  # keep compiler output out of the function's return value
+          "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9",
+          # lets the firmware raise the C3 radio's activity limit from 6 to 10 (9 rings + search), see rqa_bridge.ino
+          "--build-property", "compiler.c.elf.extra_flags=-Wl,--wrap=esp_bt_controller_init", $sketch) | Out-Host  # keep compiler output out of the function's return value
     $builds[$fq] = $dir
   }
   return $fq
