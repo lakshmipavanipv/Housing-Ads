@@ -1,0 +1,201 @@
+{
+  "model": "SR16 Sadhana Ring (Jieli)",
+  "note": "Jieli 0xAB protocol, from sadhana-rn/src/soulsync/ring (codec.ts, device.ts). Every command = 'frame' (CMD Key KeyFlag hex) + 'args'; the portal adds the AB header + CRC16 and writes to b002, replies arrive on b003. resp_offset counts from the first payload byte after CMD/Key/KeyFlag. Confirmed on hardware 2026-11-16: vibration {2,11,0} and info {2,99,16} are ACKed. Do NOT point anything at service FF00 - that is the ring's OTA channel. OLED: no remote command found that lights the screen (tested 2026-11-16 on SR16-1: LED {2,102,0}, call alert {6,4,16}, message push {4,1,0}, photo mode {6,1,0} - all ACKed, screen stayed dark; 0xDC/0xDB are drink-reminder {2,33,x}). Buzz is vibration only.",
+  "protocol": "jieli",
+  "name_prefix": "SR16,VELVUE",
+  "scan_service": "0000a00a-0000-1000-8000-00805f9b34fb",
+  "service_uuid": "0000a00a-0000-1000-8000-00805f9b34fb",
+  "cmd_char": "0000b002-0000-1000-8000-00805f9b34fb",
+  "notify_char": "0000b003-0000-1000-8000-00805f9b34fb",
+  "vars": {
+    "battery": {
+      "op": "command",
+      "frame": "020310",
+      "args": "",
+      "resp_offset": 0,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "{2,3,16} battery (RWfit x5/b.java G, msg id 0xF3): payload[0] = percent, payload[1..2] = voltage"
+    },
+    "firmware": {
+      "op": "command",
+      "frame": "020410",
+      "args": "",
+      "resp_offset": 0,
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "{2,4,16} firmware info - payload[0..2] = version a.b.c"
+    },
+    "vibration": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "{2,11,0} [level 1-3, pulse count] (device.ts setVibration). Ring buzzes 'count' pulses; Buzz repeats it every buzz_repeat_s until Stop.",
+      "commands": {
+        "start": "020b000203",
+        "stop": ""
+      }
+    },
+    "hr": {
+      "op": "jieli_live",
+      "arm": "060900030501",
+      "disarm": "060900030500",
+      "push": "022400",
+      "value_offset": 4,
+      "stale_s": 25,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "Live HR (confirmed on worn ring 2026-11-16): arm {6,9,0}[03 05 01], ring pushes {2,36,0} every 1-3 s, payload [ts32 BE, bpm, 0]; disarmed when the stage ends. The ring switches live HR off by itself after ~30 s (sends {6,9,0}[03 05 00]); the portal re-arms it."
+    },
+    "spo2": {
+      "op": "jieli_stored",
+      "pull": "050910",
+      "record_len": 6,
+      "max_age_min": 20,
+      "max_pages": 20,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "SpO2: newest of the ring's own stored readings (taken ~every 10 min while worn). Pull {5,9,16} + ACK {5,9,48}; records [ts32 BE secs since 2000 local, value, pad]. Reading DELETES the stored pages from the ring."
+    },
+    "hrv": {
+      "op": "jieli_stored",
+      "pull": "050a10",
+      "record_len": 6,
+      "max_age_min": 20,
+      "max_pages": 20,
+      "parser": "uint8",
+      "placeholder": false,
+      "note": "HRV: newest of the ring's own stored readings (taken ~every 10 min while worn). Pull {5,10,16} + ACK {5,10,48}; records [ts32 BE secs since 2000 local, value, pad]. Reading DELETES the stored pages from the ring."
+    },
+    "sleep": {
+      "op": "command",
+      "frame": "",
+      "args": "",
+      "resp_offset": 0,
+      "parser": "uint8",
+      "placeholder": true,
+      "note": "Not wired yet"
+    },
+    "count": {
+      "op": "jieli_live",
+      "push": "025300",
+      "record_len": 8,
+      "value_offset": 4,
+      "value_len": 4,
+      "parser": "uint32_le",
+      "placeholder": false,
+      "note": "Japa bead count: the ring pushes {2,0x53,0} on every bead tap, records [ts32 BE, count32 BE]; value = the ring's own running total in the last record (sadhana-rn japaCounter.ts). Tap the ring 2+ times during the stage."
+    },
+    "steps": {
+      "op": "jieli_stored",
+      "pull": [
+        "051a10",
+        "050210"
+      ],
+      "record_len": 16,
+      "value_offset": 5,
+      "value_len": 3,
+      "skip_hour_aligned": true,
+      "max_age_min": 5,
+      "max_pages": 20,
+      "parser": "uint32_le",
+      "placeholder": false,
+      "empty_msg": "ring returned no step total",
+      "note": "Today's step total: pull {5,26,16} and {5,2,16} (+ACK); 16-byte records [ts32 BE, pad, steps24 BE, cal, dist]. Hour-aligned records are hourly buckets and are skipped; the record stamped 'now' is the running daily total (sadhana-rn sync.ts decodeSteps). Shake/walk with the ring during the stage. Reading DELETES stored step pages.",
+      "keep_zero": true
+    },
+    "time": {
+      "op": "jieli_clock",
+      "set": "020100{now}",
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "SR16 has no clock getter ({2,1,16} replies empty). Apply = set {2,1,0}[yy mm dd hh mi ss] (UTC + tz + shift), then 'wake' = {6,9,0}[03 05 01] + [03 05 00] (HR on/off - a stop frame alone does not light the screen) so the ring shows its date/time page. Read = no ring commands; shows the clock as kept since the portal set it.",
+      "wake": [
+        "060900030501",
+        "060900030500"
+      ]
+    },
+    "mode": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "SR16 has no display-mode switch. Each portal mode runs the SR16 command for that function and is OK only if the ring answers every frame. Frames are CMD Key KeyFlag + payload hex. steps/sleep: no SR16 command (N/A). The factory self-test ({2,103,0}[1], read {2,112,16} -> [Gsensor, Heart, Wear], {2,103,0}[0]) answers on hardware (SR16-1: 1,1,254) but exiting it reboots the ring, so it is not used as a mode. HR/SpO2 modes leave the live measurement running so the ring stays on that page (the ring itself ends it after ~30-60 s); every other mode stops HR and SpO2 first. Time mode: set clock, then HR on/off 0.3 s apart so the screen wakes on the date/time page. Counter mode: no screen wake (it would land on date/time); waits up to tap_wait_s for the ring's bead-count push {2,0x53,0} (no command opens the counter page - open it on the ring and tap); OK shows the ring's count. tap_wait_s is 0 (off): on 2026-11-16 no ring sent a count - the counter page could not be opened on the ring and the chanting switch {2,120,16} already reads 1. Set tap_wait_s to e.g. 60 once the ring's counter gesture is known. Steps mode: no command shows the steps page; it stops HR/SpO2 (ring must answer) then pulls the stored step records and shows the newest total in the portal (pull deletes the ring's step pages).",
+      "commands": {
+        "time": [
+          "060900090500",
+          "020100{now}",
+          "060900030501",
+          "wait:0.3",
+          "060900030500"
+        ],
+        "counter": [
+          "060900090500",
+          "026010"
+        ],
+        "hr": [
+          "060900090500",
+          "060900030501"
+        ],
+        "spo2": [
+          "060900030500",
+          "060900090501"
+        ],
+        "battery": [
+          "060900030500",
+          "060900090500",
+          "020310"
+        ],
+        "steps": [
+          "060900030500",
+          "060900090500"
+        ],
+        "sleep": null
+      },
+      "tap_wait_s": 60,
+      "show_value": {
+        "steps": "steps"
+      }
+    },
+    "power": {
+      "op": "write",
+      "parser": "raw_hex",
+      "placeholder": false,
+      "note": "SR16 has no power-off command. Off/On = health-monitor master {2,14,0} [0]=low power (sensors off) / [1]=sensors on (sadhana-rn setHealthMonitorMaster).",
+      "commands": {
+        "off": [
+          "020e0000"
+        ],
+        "on": [
+          "020e0001"
+        ]
+      }
+    }
+  },
+  "rules": {
+    "spec_full_charge_min": 60,
+    "battery_interval_s": 3,
+    "battery_variance_pct": 20,
+    "battery_stall_min": 10,
+    "time_tolerance_s": 3,
+    "live_interval_s": 3,
+    "live_duration_s": 120,
+    "live_no_data_s": 30,
+    "hr": [
+      40,
+      180
+    ],
+    "spo2": [
+      90,
+      100
+    ],
+    "hrv": [
+      1,
+      250
+    ],
+    "buzz_repeat_s": 2,
+    "connect_parallel": 2,
+    "scan_timeout_s": 10,
+    "op_timeout_s": 5,
+    "blink_s": 0
+  }
+}

@@ -45,6 +45,8 @@ td button { padding: 3px 8px; font-size: 12px; margin-right: 4px; }
 .num { font-variant-numeric: tabular-nums; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 .b-PASS, .b-OK, .b-Found, .b-Connected { background: var(--pass-bg); color: var(--pass); }
+.b-FULLY { background: var(--pass-bg); color: var(--pass); }
+.b-NEEDS { background: var(--fail-bg); color: var(--fail); }
 .b-FAIL, .b-ERROR { background: var(--fail-bg); color: var(--fail); }
 .b-CHARGING, .b-MEASURING, .b-RUNNING, .b-MOVE, .b-WAITING, .b-STOPPED, .b-READ { background: var(--warn-bg); color: var(--warn); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line); margin-right: 6px; }

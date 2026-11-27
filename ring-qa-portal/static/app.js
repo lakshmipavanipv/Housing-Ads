@@ -245,7 +245,8 @@ V.battery = {
     setInfo(stageInfo('battery', `ping every ${s.interval_s ? Math.round(s.interval_s) + ' s' : '60 s'} · ${counts('battery')}`));
     table([
       {h: 'Bluetooth ring', v: ringCell},
-      {h: 'Current battery', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.current != null ? `<b>${x.current}%</b>` : (x.error ? badge('FAIL: ' + x.error) : '—'); }},
+      {h: 'Status', v: r => { const x = srow('battery', r.addr); const pct = x.current != null ? x.current : r.battery_pct; const st = x.charge_state || (pct == null ? (r.charging ? 'CHARGING' : null) : pct >= 100 ? 'FULLY CHARGED' : r.charging ? 'CHARGING' : 'NEEDS CHARGING'); return st ? `<span class="badge b-${st.split(' ')[0]}">${st === 'CHARGING' ? '⚡ ' : ''}${esc(st)}</span>` : '—'; }},
+      {h: 'Current battery', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.current != null ? `<b>${x.current}%</b>` : r.battery_pct != null ? `${r.battery_pct}%` : (x.error ? badge('FAIL: ' + x.error) : '—'); }},
       {h: 'Est. time to 100%', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.current == null ? '—' : x.current >= 100 ? 'Full' : fmtMin(x.eta_min); }},
       {h: 'Reached 100% at', cls: 'num', v: r => fmtT(srow('battery', r.addr).full_at)},
       {h: 'Estimated vs actual', cls: 'num', v: r => { const x = srow('battery', r.addr); return x.est_total_min == null ? '—' : `${fmtMin(x.est_total_min)} vs ${x.actual_min != null ? fmtMin(x.actual_min) : fmtMin(x.elapsed_min) + ' so far'}`; }},

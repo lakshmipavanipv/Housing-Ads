@@ -15,7 +15,7 @@ from . import parsers
 class BaseBackend:
     name = "base"
 
-    async def scan(self, timeout=5.0, name_prefix=""):
+    async def scan(self, timeout=5.0, name_prefix="", service=""):
         raise NotImplementedError
 
     async def connect(self, addr):
@@ -47,12 +47,19 @@ class BleakBackend(BaseBackend):
         self.clients = {}
         self.devices = {}
 
-    async def scan(self, timeout=5.0, name_prefix=""):
+    async def scan(self, timeout=5.0, name_prefix="", service=""):
         found = await self._bleak.BleakScanner.discover(timeout=timeout, return_adv=True)
+        prefixes = tuple(p.strip().upper() for p in (name_prefix or "").split(",") if p.strip())
+        service = (service or "").lower()
         out = []
         for dev, adv in found.values():
             name = adv.local_name or dev.name or ""
-            if name_prefix and not name.startswith(name_prefix):
+            # A name prefix list is authoritative (other brands share the a00a service, e.g. "SY01");
+            # the service UUID is only used when the profile gives no name prefix.
+            if prefixes:
+                if not name.upper().startswith(prefixes):
+                    continue
+            elif service and service not in [u.lower() for u in adv.service_uuids]:
                 continue
             self.devices[dev.address] = dev
             out.append({"addr": dev.address, "name": name, "rssi": adv.rssi})
@@ -170,7 +177,7 @@ class MockBackend(BaseBackend):
             raise RuntimeError("ring not connected")
         return self.rings[addr]
 
-    async def scan(self, timeout=5.0, name_prefix=""):
+    async def scan(self, timeout=5.0, name_prefix="", service=""):
         await asyncio.sleep(min(timeout, 1.5))
         return [{"addr": r.addr, "name": r.name, "rssi": r.base_rssi + random.randint(-4, 4)}
                 for r in self.rings.values() if r.name.startswith(name_prefix or "")]

@@ -43,8 +43,20 @@ def battery_update(row, pct, t, rules, scale=1.0, grace_min=1.0):
     elif est > 0 and elapsed > est * 1.5 + grace_min:
         row["status"] = "FAIL: not full by 1.5x estimate"
     else:
-        row["status"] = "CHARGING"
+        row["status"] = "PENDING"  # still charging; the result is only ever PASS or FAIL
     return row
+
+
+def charge_state(row, ring_charging):
+    """Battery tab Status column: FULLY CHARGED / CHARGING / NEEDS CHARGING (separate from the PASS/FAIL result)."""
+    pct = row.get("current")
+    if pct is None:
+        return None
+    if pct >= 100:
+        return "FULLY CHARGED"
+    s = row.get("samples", [])
+    rising = len(s) >= 2 and s[-1][1] > s[0][1]
+    return "CHARGING" if ring_charging or rising else "NEEDS CHARGING"
 
 
 def live_eval(var, row, rules, now, final=False):
@@ -52,7 +64,8 @@ def live_eval(var, row, rules, now, final=False):
     last = row.get("last_data_t")
     if last is None:
         last = row.get("start_t", now)
-    if now - last > float(rules.get("live_no_data_s", 30)):
+    # At the end, judge on what was collected: a late gap must not cancel enough good readings.
+    if now - last > float(rules.get("live_no_data_s", 30)) and not (final and len(vals) >= 3):
         return "FAIL: no data"
     if not vals:
         return "FAIL: no data" if final else "WAITING"
@@ -84,7 +97,8 @@ class StageEngine:
         return self.mgr.rules
 
     def connected(self):
-        return [a for a, r in self.mgr.rings.items() if r.get("connected")]
+        # rings the watchdog is reconnecting stay in the test (their commands wait for the link to return)
+        return [a for a, r in self.mgr.rings.items() if r.get("connected") or r.get("keep")]
 
     def reset(self):
         for t in self.tasks.values():
@@ -163,10 +177,11 @@ class StageEngine:
                 row = st["rows"].setdefault(a, {})
                 if err:
                     row["error"] = err
-                    row.setdefault("status", "ERROR")
+                    row.setdefault("status", "PENDING")  # read error shows in the battery column; result stays PASS/FAIL
                     continue
                 row.pop("error", None)
                 battery_update(row, int(pct), now, self.rules, self.time_scale, grace)
+                row["charge_state"] = charge_state(row, self.mgr.rings.get(a, {}).get("charging"))
             st["last_poll"] = now
             if st["rows"] and all(is_done(r.get("status")) for r in st["rows"].values()):
                 break
@@ -179,6 +194,9 @@ class StageEngine:
         read_only = bool(p.get("read_only"))
         tol = float(self.rules.get("time_tolerance_s", 2))
         has_tz = "timezone" in self.mgr.profile.get("vars", {})
+
+        if self.mgr.profile.get("vars", {}).get("time", {}).get("op") == "jieli_clock":
+            return await self._time_jieli(st, tz, shift, read_only)
 
         async def one(addr):
             row = st["rows"][addr] = {"status": "RUNNING"}
@@ -210,6 +228,50 @@ class StageEngine:
 
         await asyncio.gather(*(one(a) for a in self.connected()))
 
+    async def _time_jieli(self, st, tz, shift, read_only):
+        """SR16 has no clock getter (any HR-based read would switch the HR page on), so:
+        Run  = set the wall clock ({2,1,0}) to UTC + time zone + shift, then wake the screen with a 'stop HR'
+               frame so the ring shows its date/time page. PASS = the ring ACKed the set.
+        Read = no ring commands: shows each ring's clock as kept since this portal last set it."""
+        import datetime as _dt
+        if tz is None:
+            tz = -time.altzone // 60 if time.localtime().tm_isdst else -time.timezone // 60
+        v = self.mgr.var("time")
+        wake = v.get("wake")
+        clock = self.mgr.__dict__.setdefault("_clock_set", {})   # addr -> (epoch set at, tz_min, shift_s)
+
+        async def one(addr):
+            row = st["rows"][addr] = {"status": "RUNNING"}
+            if read_only:
+                c = clock.get(addr)
+                if not c:
+                    row["status"] = "READ: not set in this session - press Apply to set it"
+                    return
+                set_at, ctz, cshift = c
+                row["before_time"], row["before_tz"] = int(time.time() + cshift), ctz
+                row["status"] = "READ: kept since set at " + _dt.datetime.fromtimestamp(set_at).strftime("%H:%M:%S")
+                return
+            try:
+                target = time.time() + shift * 60
+                wall = _dt.datetime.utcfromtimestamp(target) + _dt.timedelta(minutes=tz)
+                body = bytes.fromhex(v["set"].replace("{now}", "")) + bytes(
+                    [wall.year % 100, wall.month, wall.day, wall.hour, wall.minute, wall.second])
+                await self.mgr.jieli_request(addr, v, body)
+                clock[addr] = (time.time(), tz, shift * 60)
+                row["target"], row["after_time"], row["after_tz"] = int(target), int(target), tz
+                for i, w in enumerate([wake] if isinstance(wake, str) else (wake or [])):
+                    try:
+                        if i:
+                            await asyncio.sleep(float(self.rules.get("time_wake_gap_s", 0.3)))
+                        await self.mgr.jieli_request(addr, v, bytes.fromhex(w))
+                    except Exception:
+                        pass
+                row["status"] = "PASS: clock set (ring ACKed) - date/time on screen"
+            except Exception as e:
+                row["status"] = f"FAIL: {type(e).__name__}: {e}"
+
+        await asyncio.gather(*(one(a) for a in self.connected()))
+
     # ---------- modes (header click switches all rings) ----------
     async def apply_mode(self, mode):
         if mode not in MODE_KEYS:
@@ -218,21 +280,60 @@ class StageEngine:
         st["last_mode"], st["last_at"] = mode, time.time()
         var = "power" if mode in ("off", "on") else "mode"
 
+        def restatus(row):
+            ms = row["modes"]
+            if any(v.startswith("FAIL") for v in ms.values()):
+                row["status"] = "FAIL"
+            elif all(ms.get(k) == "OK" or str(ms.get(k)).startswith(("N/A", "OK:")) for k in MODE_KEYS):
+                row["status"] = "PASS"
+            else:
+                row["status"] = "PENDING"
+
+        tap_s = float(self.mgr.profile.get("vars", {}).get("mode", {}).get("tap_wait_s", 0) or 0)
+
+        async def wait_tap(addr, row, live, t0):
+            """Counter mode: PASS once the ring pushes a bead count ({2,0x53,0}) after the click."""
+            loop = asyncio.get_running_loop()
+            end = loop.time() + tap_s
+            while loop.time() < end:
+                if live.get("t") and live["t"] > t0 and live.get("value") is not None:
+                    row["modes"]["counter"] = f"OK: count {live['value']}"
+                    restatus(row)
+                    return
+                left = int(end - loop.time())
+                row["modes"]["counter"] = f"WAITING: tap the ring ({left} s)"
+                await asyncio.sleep(0.5)
+            row["modes"]["counter"] = f"FAIL: no tap count within {int(tap_s)} s"
+            restatus(row)
+
         async def one(addr):
             row = st["rows"].setdefault(addr, {"modes": {}})
             try:
                 ok = await self.mgr.send_cmd(addr, var, mode, verify=True)
                 row["modes"][mode] = "OK" if ok else "FAIL: read-back mismatch"
+                show = (self.mgr.profile.get("vars", {}).get(var, {}).get("show_value") or {}).get(mode)
+                if ok and show:
+                    import datetime as _dt
+                    cur = await self.mgr.stored_latest(addr, show)
+                    if cur is None:
+                        row["modes"][mode] = f"OK: 0 {show} (none stored)"
+                    else:
+                        at = _dt.datetime(2000, 1, 1) + _dt.timedelta(seconds=cur[0])
+                        row["modes"][mode] = f"OK: {cur[1]:,} {show} (ring {at:%H:%M})"
+                if ok and mode == "counter" and tap_s and "count" in self.mgr.profile.get("vars", {}):
+                    loop = asyncio.get_running_loop()
+                    live = self.mgr._live.setdefault((addr, "count"), {"armed": False, "value": None, "t": None})
+                    old = self.tasks.pop(("tap", addr), None)
+                    if old:
+                        old.cancel()
+                    row["modes"][mode] = f"WAITING: tap the ring ({int(tap_s)} s)"
+                    self.tasks[("tap", addr)] = asyncio.create_task(wait_tap(addr, row, live, loop.time()))
+            except NotImplementedError as e:
+                row["modes"][mode] = f"N/A: {e}"
             except Exception as e:
                 row["modes"][mode] = f"FAIL: {e}"
-            ms = row["modes"]
-            if any(v.startswith("FAIL") for v in ms.values()):
-                row["status"] = "FAIL"
-            elif all(ms.get(k) == "OK" for k in MODE_KEYS):
-                row["status"] = "PASS"
-            else:
-                row["status"] = "PENDING"
-            return ms[mode] == "OK"
+            restatus(row)
+            return not row["modes"][mode].startswith("FAIL")
 
         addrs = self.connected()
         res = await asyncio.gather(*(one(a) for a in addrs))
@@ -244,6 +345,13 @@ class StageEngine:
         duration = float(self.rules.get("live_duration_s", 120))
         st["interval_s"], st["duration_s"] = interval, duration
         t0 = st["started_at"]
+        try:
+            await self._live_loop(st, var, interval, duration, t0)
+        finally:
+            await asyncio.gather(*(self.mgr.live_stop(a, var) for a in list(self.mgr.rings)),
+                                 return_exceptions=True)
+
+    async def _live_loop(self, st, var, interval, duration, t0):
         while True:
             addrs = self.connected()
             res = await asyncio.gather(*(self._read(a, var) for a in addrs))

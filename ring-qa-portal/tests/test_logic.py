@@ -19,7 +19,7 @@ def test_parsers_roundtrip():
 def test_battery_pass_within_estimate():
     row = {}
     battery_update(row, 50, 0, RULES)                  # 50% -> estimate 30 min
-    assert row["est_total_min"] == 30 and row["status"] == "CHARGING"
+    assert row["est_total_min"] == 30 and row["status"] == "PENDING"
     battery_update(row, 75, 15 * 60, RULES)
     assert row["eta_min"] == 15.0                      # measured 25%/15min -> 15 min left
     battery_update(row, 100, 32 * 60, RULES)

@@ -50,6 +50,7 @@ async def _startup():
     storage.init()
     if APP["backend"] is None:
         set_backend(CFG["backend"])
+    mgr.start_watchdog()  # keeps every connected ring connected (auto-reconnect + keep-alive)
 
 
 def bad(e):
@@ -146,6 +147,20 @@ async def api_buzz(body: dict = Body(...)):
             raise bad(f"{mgr.rings[a]['unit_id']} is not connected")
         mgr.start_buzz(a) if on else mgr.stop_buzz(a)
     return {"count": len(addrs)}
+
+
+@app.post("/api/raw")
+async def api_raw(body: dict = Body(...)):
+    """Debug: send one Jieli body (hex: CMD Key KeyFlag + payload) to one ring or all connected rings; returns reply payloads."""
+    data = bytes.fromhex(body["hex"])
+    addrs = [a for a, r in mgr.rings.items() if r.get("connected")] if body.get("all") else [body.get("addr")]
+
+    async def one(a):
+        try:
+            return a, (await mgr.jieli_request(a, {}, data)).hex()
+        except Exception as e:
+            return a, f"ERR {e}"
+    return {mgr.rings[a]["unit_id"]: v for a, v in await asyncio.gather(*(one(a) for a in addrs))}
 
 
 @app.post("/api/bt/seen")
