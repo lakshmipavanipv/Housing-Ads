@@ -1,6 +1,7 @@
 """Ring QA Portal - local web server.
 
-Run:  python server.py                  (local laptop Bluetooth)
+Run:  python server.py                  (ESP32 USB bridge boards if any are plugged in, else laptop Bluetooth)
+      python server.py --backend local  (force the laptop's own Bluetooth)
       python server.py --backend mock   (30 simulated rings, no hardware)
 Then open http://localhost:8000
 """
@@ -21,7 +22,7 @@ from profiles_store import ProfileStore
 from stages import LIVE_VARS, StageEngine
 
 ROOT = Path(__file__).parent
-CFG = {"backend": "local", "mock_rings": 30, "speed": 1.0}
+CFG = {"backend": "auto", "mock_rings": 30, "speed": 1.0}
 APP = {"backend": None, "backend_error": None, "ring_target": 30}
 
 store = ProfileStore(ROOT / "profiles")
@@ -31,7 +32,18 @@ app = FastAPI(title="Ring QA Portal")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
+def auto_backend():
+    """ESP32 bridge boards when any are on USB, otherwise the laptop's own Bluetooth."""
+    try:
+        from ble.bridge import detect_ports
+        return "dongles" if detect_ports() else "local"
+    except Exception:
+        return "local"
+
+
 def set_backend(mode):
+    if mode == "auto":
+        mode = auto_backend()
     engine.reset()
     try:
         mgr.set_backend(make_backend(mode, store, CFG["mock_rings"], CFG["speed"]))
@@ -259,8 +271,9 @@ async def api_profile_load(body: dict = Body(...)):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Ring QA Portal")
-    ap.add_argument("--backend", choices=["local", "mock", "dongles"], default="local",
-                    help="local = laptop Bluetooth, dongles = ESP32 USB bridge boards, mock = simulator")
+    ap.add_argument("--backend", choices=["auto", "local", "mock", "dongles"], default="auto",
+                    help="auto (default) = ESP32 boards if plugged in, else laptop Bluetooth; "
+                         "local = laptop Bluetooth, dongles = ESP32 USB bridge boards, mock = simulator")
     ap.add_argument("--rings", type=int, default=30, help="number of simulated rings (mock only)")
     ap.add_argument("--speed", type=float, default=1.0, help="mock time speed-up, e.g. 30 = 1 h in 2 min")
     ap.add_argument("--host", default="127.0.0.1")

@@ -2,3 +2,4 @@ qa.db
 profiles/_active.txt
 __pycache__/
 .pytest_cache/
+tools/

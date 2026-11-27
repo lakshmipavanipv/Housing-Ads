@@ -88,7 +88,11 @@ class RingManager:
         r = self.rings[addr]
         try:
             async with self._lock(addr):
-                await asyncio.wait_for(self._b().connect(addr), 20)
+                b = self._b()
+                if getattr(b, "own_timeouts", False):
+                    await b.connect(addr)
+                else:
+                    await asyncio.wait_for(b.connect(addr), 20)
             self._cmd_sub.discard(addr)
             if self._jieli():
                 await self._ensure_cmd_notify(addr)  # ring frames must be ACKed from the start
@@ -172,9 +176,14 @@ class RingManager:
             await asyncio.sleep(0.5)
 
     async def _ping(self, addr):
+        # The watchdog itself runs this, so it must never wait for a reconnect (only the watchdog reconnects -
+        # waiting here would stall every reconnect for up to ~90 s). One quick attempt, hard-capped.
+        if not self.backend or not self.backend.is_connected(addr):
+            return
         v = self.var("battery")
         try:
-            await self.jieli_request(addr, v, bytes.fromhex(v["frame"] + v.get("args", "")), timeout=5)
+            await asyncio.wait_for(
+                self._jieli_request_once(addr, v, bytes.fromhex(v["frame"] + v.get("args", "")), timeout=5), 7)
         except Exception:
             pass
 
@@ -182,7 +191,8 @@ class RingManager:
         out = []
         for a, r in self.rings.items():
             if self.backend and r.get("connected") and not self.backend.is_connected(a):
-                r["connected"], r["error"] = False, "connection lost"
+                r["connected"] = False
+                r["error"] = "connection lost - reconnecting" if r.get("keep") else "connection lost"
             out.append({**r, "buzzing": self.buzzing(a)})
         return sorted(out, key=lambda r: r["unit_id"])
 
@@ -219,7 +229,7 @@ class RingManager:
                 if r is not None:
                     r.setdefault("raw", {})[f"{c:02x}{k:02x}{kf:02x}"] = data.hex()
                 if flag != jieli.FLAG_REPLY:
-                    asyncio.ensure_future(self._b().write(addr, None, self.profile.get("cmd_char"),
+                    asyncio.ensure_future(self._b().write(addr, self.profile.get("service_uuid"), self.profile.get("cmd_char"),
                                                           jieli.ack(c, k, kf), True))
                 fut = self._cmd_wait.get((addr, (c, k)))
                 if fut and not fut.done():

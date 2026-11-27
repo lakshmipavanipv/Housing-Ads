@@ -23,10 +23,17 @@ as separate Bluetooth radios instead. **Each board holds up to 9 rings (an ESP32
    the browser.
 4. Check the **Connection** page: each board should show its COM port and **Connected**, with rings 0 / 9.
 
+Rings fill the boards in order: board 1 (lowest COM port) until full, then board 2, then board 3. Each ring goes to
+the first board that heard it in the last search, and a ring is only ever connected to one board.
+If a board blinks but never shows a COM port, its USB cable is charge-only - use a data cable.
+ESP32-C3 boards have small antennas: keep the rings within ~30 cm of the boards and turn off the Bluetooth of any
+phone paired with the rings.
+
 ## Run (other modes)
 ```
-python server.py                     (laptop's own Bluetooth)
-python server.py --backend dongles   (ESP32 USB boards)
+python server.py                     (ESP32 USB boards if plugged in, else the laptop's own Bluetooth)
+python server.py --backend dongles   (ESP32 USB boards only)
+python server.py --backend local     (laptop's own Bluetooth only)
 ```
 Open **http://localhost:8000** in Chrome or Edge.
 

@@ -4,6 +4,7 @@ Each board is an independent Bluetooth radio holding up to `max_conn` rings (9 w
 so Windows' own Bluetooth stack is bypassed entirely. Rings are spread across the boards automatically.
 """
 import asyncio
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,9 +27,15 @@ def norm_uuid(u):
     return u
 
 
+def _port_num(port):
+    m = re.search(r"(\d+)$", port)
+    return (int(m.group(1)) if m else 0, port)
+
+
 def detect_ports():
+    """ESP32 COM ports in board order: COM3 = board 1, COM6 = board 2, COM10 = board 3 ..."""
     from serial.tools import list_ports
-    return sorted(p.device for p in list_ports.comports() if p.vid in ESP32_VIDS)
+    return sorted((p.device for p in list_ports.comports() if p.vid in ESP32_VIDS), key=_port_num)
 
 
 class Bridge:
@@ -39,6 +46,7 @@ class Bridge:
         self.port, self.loop = port, loop
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = port, BAUD, 0.2
+        s.write_timeout = 1.0  # a board without the bridge firmware never reads, so a plain write would hang forever
         s.dtr = False
         s.rts = False
         s.open()
@@ -55,14 +63,17 @@ class Bridge:
         deadline, sent = time.time() + 8, 0.0
         while time.time() < deadline:
             if time.time() - sent > 1.5:
-                self.ser.write(b"0 INFO\n")
                 sent = time.time()
+                try:
+                    self.ser.write(b"0 INFO\n")
+                except Exception:  # serial write timeout: nothing on the board is reading USB
+                    pass
             line = self.ser.readline().decode(errors="replace").strip()
             if line.startswith("0 OK INFO"):
                 p = line.split()
                 return {"mac": p[3], "max_conn": int(p[4]), "fw": p[5] if len(p) > 5 else "?"}
         self.ser.close()
-        raise RuntimeError("no answer from RQA bridge firmware - flash this board with flash_bridges.bat")
+        raise RuntimeError("board has no Ring QA bridge firmware yet - run flash_bridges.bat once for this board")
 
     def _reader(self):
         while self.alive:
@@ -137,6 +148,7 @@ class Bridge:
 
 class BridgeBackend(BaseBackend):
     name = "dongles"
+    own_timeouts = True  # each board command has its own timeout; queue time on a busy board must not count
 
     def __init__(self, ports=None):
         try:
@@ -157,9 +169,9 @@ class BridgeBackend(BaseBackend):
 
         with ThreadPoolExecutor(len(ports)) as ex:
             self.bridges = [b for b in ex.map(try_open, ports) if b]
-        if not self.bridges:
-            raise RuntimeError("; ".join(f"{p}: {e}" for p, e in self.errors.items()))
-        self.route, self.types = {}, {}
+        self.bridges.sort(key=lambda b: _port_num(b.port))  # board 1 = lowest COM port, filled first
+        # Even if no board answers, keep the backend so the Connection page lists each board and its problem.
+        self.route, self.types, self.svc, self.heard = {}, {}, {}, {}
 
     def status(self):
         return [b.status() for b in self.bridges] + [{"port": p, "error": e, "alive": False}
@@ -169,40 +181,62 @@ class BridgeBackend(BaseBackend):
         for b in self.bridges:
             b.close()
 
-    async def scan(self, timeout=6.0, name_prefix=""):
+    async def scan(self, timeout=6.0, name_prefix="", service=""):
         res = await asyncio.gather(*(b.scan(timeout) for b in self.bridges if b.alive), return_exceptions=True)
-        best = {}
-        for r in res:
+        # which boards heard each ring in this scan (boards hear differently: antenna, distance, hub position)
+        live = [b for b in self.bridges if b.alive]
+        best, heard = {}, {}
+        for b, r in zip(live, res):
             if isinstance(r, Exception):
                 continue
             for d in r:
+                heard.setdefault(d["addr"], set()).add(b)
                 cur = best.get(d["addr"])
                 if not cur or d["rssi"] > cur["rssi"]:
                     best[d["addr"]] = {**d, "name": d["name"] or (cur or {}).get("name", "")}
+        # name_prefix may be a comma list ("SR16,VELVUE"); match case-insensitively like the local backend
+        prefixes = tuple(p.strip().upper() for p in (name_prefix or "").split(",") if p.strip())
         out = []
         for d in best.values():
-            if name_prefix and not d["name"].startswith(name_prefix):
+            if prefixes and not d["name"].upper().startswith(prefixes):
                 continue
             self.types[d["addr"]] = d["type"]
+            self.heard[d["addr"]] = heard.get(d["addr"], set())
             out.append({"addr": d["addr"], "name": d["name"], "rssi": d["rssi"]})
         return out
 
     async def connect(self, addr):
         if self.is_connected(addr):
             return True
-        free = [b for b in self.bridges if b.alive and len(b.connected) < b.max_conn]
-        if not free:
-            cap = sum(b.max_conn for b in self.bridges if b.alive)
-            raise RuntimeError(f"all boards are full ({cap} rings max) - add a board or test fewer rings")
-        b = min(free, key=lambda x: len(x.connected))
-        b.connected.add(addr)  # reserve the slot while connecting
-        try:
-            await b.cmd(f"CONN {addr} {self.types.get(addr, 0)}", 20)
-        except Exception:
-            b.connected.discard(addr)
-            raise
-        self.route[addr] = b
-        return True
+        # Fill the boards one after the other: board 1 takes rings until it is full, then board 2, then board 3.
+        # Only boards that heard the ring in the last scan are tried first (a board that cannot hear a ring cannot
+        # connect to it); if those fail, the remaining boards are tried in order.
+        # A ring is only ever routed to ONE board, and the slot is reserved before any await, so two connects
+        # running at once can never land the same ring on two boards or overfill a board.
+        heard = self.heard.get(addr) or set()
+        order = [b for b in self.bridges if b in heard] + [b for b in self.bridges if b not in heard]
+        last = None
+        for b in order:
+            if not b.alive or len(b.connected) >= b.max_conn:
+                continue
+            b.connected.add(addr)  # reserve the slot while connecting
+            try:
+                # the board's own connect timeout is 10 s; this limit only starts once the board takes the command,
+                # so rings queued behind others on the same board are not failed for waiting their turn
+                await b.cmd(f"CONN {addr} {self.types.get(addr, 0)}", 15)
+            except asyncio.CancelledError:
+                b.connected.discard(addr)  # never leave a slot reserved for a ring that is not there
+                raise
+            except Exception as e:
+                b.connected.discard(addr)
+                last = RuntimeError(f"{b.port}: {e}")
+                continue
+            self.route[addr] = b
+            return True
+        if last:
+            raise last
+        cap = sum(b.max_conn for b in self.bridges if b.alive)
+        raise RuntimeError(f"all boards are full ({cap} rings max) - add a board or test fewer rings")
 
     def _b(self, addr):
         b = self.route.get(addr)
@@ -222,14 +256,19 @@ class BridgeBackend(BaseBackend):
         b = self.route.get(addr)
         return bool(b and b.alive and addr in b.connected)
 
+    def _s(self, addr, service):
+        if service:
+            self.svc[addr] = service
+        return service or self.svc.get(addr) or ""
+
     async def read(self, addr, service, char):
-        p = await self._b(addr).cmd(f"READ {addr} {service} {char}")
+        p = await self._b(addr).cmd(f"READ {addr} {self._s(addr, service)} {char}")
         return bytes.fromhex(p[0]) if p else b""
 
     async def write(self, addr, service, char, data, response=True):
-        await self._b(addr).cmd(f"WRITE {addr} {service} {char} {data.hex() or '00'} {1 if response else 0}")
+        await self._b(addr).cmd(f"WRITE {addr} {self._s(addr, service)} {char} {data.hex() or '00'} {1 if response else 0}")
 
     async def start_notify(self, addr, service, char, cb):
         b = self._b(addr)
         b.ntf_cbs[(addr, norm_uuid(char))] = cb
-        await b.cmd(f"SUB {addr} {service} {char}")
+        await b.cmd(f"SUB {addr} {self._s(addr, service)} {char}")

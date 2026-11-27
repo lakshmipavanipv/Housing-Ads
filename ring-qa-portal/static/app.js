@@ -161,11 +161,11 @@ V.connection = {
   update: st => {
     const el = $('#adStatus'); if (!el) return;
     const h = st.backend_error ? `<div class="err">Adapter error: ${esc(st.backend_error)}</div>`
-      : `<div class="info">Active: <b>${st.backend === 'mock' ? 'Simulator' : 'Local laptop Bluetooth'}</b> · rings known ${st.rings.length} · connected ${st.rings.filter(r => r.connected).length} / ${st.ring_target}</div>`;
+      : `<div class="info">Active: <b>${st.backend === 'mock' ? 'Simulator' : st.backend === 'dongles' ? 'USB ESP32 bridge boards' : 'Local laptop Bluetooth'}</b> · rings known ${st.rings.length} · connected ${st.rings.filter(r => r.connected).length} / ${st.ring_target}</div>`;
     if (el._h !== h) { el.innerHTML = h; el._h = h; }
     const dg = st.dongles || [], dEl = $('#dongles');
     const dh = `<div class="tblwrap"><table><thead><tr><th>Board</th><th>COM port</th><th>Board Bluetooth ID</th><th>Firmware</th><th>Rings connected</th><th>Status</th><th><button data-act="reconnectBoards">Connect boards</button></th></tr></thead><tbody>${
-      [0, 1, 2].map(i => { const d = dg[i]; return `<tr><td>USB board ${i + 1}</td><td>${esc(d?.port || '—')}</td><td class="mac">${esc(d?.mac || '')}</td><td>${esc(d?.fw || '')}</td><td class="num">${d?.max_conn ? `${d.rings} / ${d.max_conn}` : '—'}</td><td>${
+      [...Array(Math.max(3, dg.length)).keys()].map(i => { const d = dg[i]; return `<tr><td>USB board ${i + 1}</td><td>${esc(d?.port || '—')}</td><td class="mac">${esc(d?.mac || '')}</td><td>${esc(d?.fw || '')}</td><td class="num">${d?.max_conn ? `${d.rings} / ${d.max_conn}` : '—'}</td><td>${
         !d ? badge(st.backend === 'dongles' ? 'FAIL: not detected' : 'Not used') : d.alive ? badge('Connected') : badge('FAIL: ' + (d.error || 'offline'))}</td><td></td></tr>`; }).join('')
     }</tbody></table></div>`;
     if (dEl && dEl._h !== dh) { dEl.innerHTML = dh; dEl._h = dh; }
@@ -367,7 +367,7 @@ function go(tab) {
 function update() {
   const st = S.st; if (!st) return;
   const c = st.rings.filter(r => r.connected).length;
-  $('#chip').textContent = `${st.backend === 'mock' ? 'Simulator' : 'Local Bluetooth'}${st.backend_error ? ' (error)' : ''} · ${c} / ${st.ring_target} connected`;
+  $('#chip').textContent = `${st.backend === 'mock' ? 'Simulator' : st.backend === 'dongles' ? `ESP32 boards (${(st.dongles || []).filter(d => d.alive).length})` : 'Local Bluetooth'}${st.backend_error ? ' (error)' : ''} · ${c} / ${st.ring_target} connected`;
   document.querySelectorAll('.fb').forEach(x => { x.textContent = $('#batch').value || '(set at top)'; });
   document.querySelectorAll('.ft').forEach(x => { x.textContent = $('#tester').value || '(set at top)'; });
   if (V[S.tab].update) V[S.tab].update(st);

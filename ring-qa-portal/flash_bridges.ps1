@@ -2,7 +2,8 @@
 # Run by double-clicking flash_bridges.bat. Needs internet the first time (downloads ~500 MB of ESP32 tools).
 param(
   [string]$Fqbn = "",
-  [string[]]$Ports = @()
+  [string[]]$Ports = @(),
+  [switch]$Yes   # skip the "flash all?" question (for unattended runs)
 )
 $ErrorActionPreference = "Stop"
 $here  = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -56,7 +57,7 @@ if (-not $Ports) { throw "No ESP32 COM ports found. Check Device Manager > Ports
 
 Write-Host ""
 Write-Host "ESP32 boards found on: $($Ports -join ', ')" -ForegroundColor Yellow
-$ok = Read-Host "Flash the bridge firmware to ALL of these ports? (Y/N)"
+$ok = if ($Yes) { "Y" } else { Read-Host "Flash the bridge firmware to ALL of these ports? (Y/N)" }
 if ($ok -notmatch '^[Yy]') { Write-Host "Cancelled."; exit 1 }
 
 # Two firmware variants: boards with a USB-serial chip (CP210x/CH340) and boards using the chip's own USB,
@@ -70,7 +71,7 @@ function Build-For([bool]$isNative) {
     Write-Host "Compiling firmware for $fq ..." -ForegroundColor Cyan
     Run @("compile", "--fqbn", $fq, "--build-path", $dir,
           "--build-property", "compiler.cpp.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9",
-          "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9", $sketch)
+          "--build-property", "compiler.c.extra_flags=-DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=9", $sketch) | Out-Host  # keep compiler output out of the function's return value
     $builds[$fq] = $dir
   }
   return $fq
