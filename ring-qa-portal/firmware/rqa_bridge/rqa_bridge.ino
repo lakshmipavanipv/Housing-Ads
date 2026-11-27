@@ -24,7 +24,9 @@ static std::map<std::string, NimBLEClient*> clients;
 
 static void out(const String& s) {
   xSemaphoreTake(outLock, portMAX_DELAY);
-  Serial.println(s);
+  // When the portal is closed nobody reads the USB port; on native-USB boards (ESP32-C3/S3) a blocking write
+  // would then hang the whole board while rings keep sending notifications. Drop the line instead.
+  if (Serial.availableForWrite() >= (int)s.length() + 2) Serial.println(s);
   xSemaphoreGive(outLock);
 }
 
@@ -162,6 +164,10 @@ static void handle(char* line) {
 
 void setup() {
   Serial.setRxBufferSize(1024);
+#if ARDUINO_USB_CDC_ON_BOOT
+  Serial.setTxBufferSize(4096);  // room for bursts of notifications from 9 rings
+  Serial.setTxTimeoutMs(0);      // never block on USB when the portal is not reading
+#endif
   Serial.begin(115200);
   outLock = xSemaphoreCreateMutex();
   NimBLEDevice::init("");
